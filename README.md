@@ -1,4 +1,27 @@
-﻿# Codex Pet Limit Rings for Windows
+<p align="center">
+  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows hero banner showing the live pet usage rings" width="100%">
+</p>
+
+<h1 align="center">Codex Pet Limit Rings for Windows</h1>
+
+<p align="center">
+  A transparent Windows companion overlay that follows your Codex <code>/pet</code> and shows live 5h and weekly usage rings.
+</p>
+
+<p align="center">
+  <a href="VERSION"><img alt="Version 0.1.1" src="https://img.shields.io/badge/version-0.1.1-3CEBBD?style=for-the-badge"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
+  <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a>
+  · <a href="#install">Install</a>
+  · <a href="#customize">Customize</a>
+  · <a href="#data-and-privacy">Data And Privacy</a>
+  · <a href="README.ko.md">한국어</a>
+</p>
 
 Windows companion overlay that draws translucent Codex usage-limit rings around
 the visible `/pet` avatar.
@@ -11,6 +34,7 @@ but is built for Windows with PowerShell, WPF, and Win32 window positioning.
 
 ## What It Does
 
+- Current version: `0.1.1`.
 - Draws a complete circular ring around the current Codex `/pet` avatar.
 - Auto-discovers the installed Codex Desktop app and starts it when the helper starts.
 - Automatically waits for `/pet` and shows the rings when the pet overlay opens.
@@ -334,6 +358,10 @@ codex-pet-limit-rings-Win/
     CodexAppDiscovery.ps1
     CodexPetLimitRings.ps1
   docs/
+    assets/
+      codex-pet-limit-rings-win-hero.png
+      current-pet-usage-capture.png
+      imagegen-hero-background.png
     architecture.md
     troubleshooting.md
   tools/

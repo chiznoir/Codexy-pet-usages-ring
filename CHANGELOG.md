@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Added a polished GitHub README hero image using an image-generated backdrop and a live local `/pet` usage capture.
+- Added README badges, version presentation, and clearer project navigation.
+- Preserved upstream MIT license attribution in `LICENSE` and `NOTICE.md`.
+- Included `NOTICE.md` in installer copies and release zip packages.
+
 ## 0.1.0
 
 - Initial Windows companion overlay.
@@ -11,4 +18,3 @@
 - HTML settings page for ring colors, opacity, and hover text sizing.
 - Live settings reload from local `settings.json`.
 - Codex Desktop auto-discovery and auto-start from install/start shortcuts.
-- Preserved upstream MIT license attribution and source notice for the fork.

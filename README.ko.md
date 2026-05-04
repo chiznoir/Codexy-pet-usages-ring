@@ -1,4 +1,27 @@
-﻿# Codex Pet Limit Rings for Windows
+<p align="center">
+  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows 소개 배너" width="100%">
+</p>
+
+<h1 align="center">Codex Pet Limit Rings for Windows</h1>
+
+<p align="center">
+  Codex <code>/pet</code>를 따라다니며 5h/weekly 사용량 링을 보여주는 Windows companion overlay입니다.
+</p>
+
+<p align="center">
+  <a href="VERSION"><img alt="Version 0.1.1" src="https://img.shields.io/badge/version-0.1.1-3CEBBD?style=for-the-badge"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
+  <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
+</p>
+
+<p align="center">
+  <a href="#빠른-시작">빠른 시작</a>
+  · <a href="#설치">설치</a>
+  · <a href="#커스터마이즈--customize">커스터마이즈</a>
+  · <a href="#데이터와-프라이버시--data-and-privacy">데이터와 프라이버시</a>
+  · <a href="README.md">English</a>
+</p>
 
 Codex `/pet` 아바타 주변에 반투명 사용량 링을 표시하는 Windows용 companion overlay입니다.
 
@@ -10,6 +33,7 @@ Codex `/pet` 아바타 주변에 반투명 사용량 링을 표시하는 Windows
 
 ## 기능
 
+- 현재 버전: `0.1.1`.
 - 현재 보이는 Codex `/pet` 아바타 주변에 완전한 원형 링을 표시합니다.
 - 설치된 Codex Desktop 앱 경로를 자동으로 찾고, helper가 시작될 때 Codex를 함께 실행합니다.
 - `/pet`가 아직 꺼져 있으면 자동으로 기다렸다가, 펫 오버레이가 열릴 때 링을 표시합니다.
@@ -324,6 +348,10 @@ codex-pet-limit-rings-Win/
     CodexAppDiscovery.ps1
     CodexPetLimitRings.ps1
   docs/
+    assets/
+      codex-pet-limit-rings-win-hero.png
+      current-pet-usage-capture.png
+      imagegen-hero-background.png
     architecture.md
     troubleshooting.md
   tools/
