@@ -1,11 +1,5 @@
 <p align="center">
-  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows 소개 배너" width="100%">
-</p>
-
-<h1 align="center">Codex Pet Limit Rings for Windows</h1>
-
-<p align="center">
-  Codex <code>/pet</code>를 따라다니며 5h/weekly 사용량 링을 보여주는 Windows companion overlay입니다.
+  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows GitHub title bar" width="100%">
 </p>
 
 <p align="center">

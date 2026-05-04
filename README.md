@@ -1,11 +1,5 @@
 <p align="center">
-  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows hero banner showing the live pet usage rings" width="100%">
-</p>
-
-<h1 align="center">Codex Pet Limit Rings for Windows</h1>
-
-<p align="center">
-  A transparent Windows companion overlay that follows your Codex <code>/pet</code> and shows live 5h and weekly usage rings.
+  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows GitHub title bar" width="100%">
 </p>
 
 <p align="center">
