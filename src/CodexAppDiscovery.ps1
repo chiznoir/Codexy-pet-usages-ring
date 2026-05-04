@@ -49,6 +49,23 @@ function Test-CodexDesktopRunning {
   return [bool](Get-CodexDesktopProcess)
 }
 
+function Start-CodexDesktopResolvedApp {
+  param($App)
+
+  if (-not [string]::IsNullOrWhiteSpace($App.AppId)) {
+    Start-Process -FilePath "explorer.exe" -ArgumentList "shell:AppsFolder\$($App.AppId)" | Out-Null
+    return $true
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($App.ExecutablePath) -and (Test-Path -LiteralPath $App.ExecutablePath)) {
+    $workingDirectory = Split-Path -Parent $App.ExecutablePath
+    Start-Process -FilePath $App.ExecutablePath -WorkingDirectory $workingDirectory | Out-Null
+    return $true
+  }
+
+  return $false
+}
+
 function Get-CodexStartApp {
   try {
     $apps = @(Get-StartApps -ErrorAction Stop | Where-Object {
@@ -185,13 +202,7 @@ function Start-CodexDesktopApp {
   $started = $false
   $errorMessage = ""
   try {
-    if (-not [string]::IsNullOrWhiteSpace($app.ExecutablePath) -and (Test-Path -LiteralPath $app.ExecutablePath)) {
-      Start-Process -FilePath $app.ExecutablePath | Out-Null
-      $started = $true
-    } elseif (-not [string]::IsNullOrWhiteSpace($app.AppId)) {
-      Start-Process -FilePath "explorer.exe" -ArgumentList "shell:AppsFolder\$($app.AppId)" | Out-Null
-      $started = $true
-    }
+    $started = Start-CodexDesktopResolvedApp -App $app
   } catch {
     $errorMessage = $_.Exception.Message
     if (-not [string]::IsNullOrWhiteSpace($app.AppId)) {

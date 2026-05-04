@@ -90,7 +90,7 @@ function Remove-ObsoleteEntryPoints {
 
 function Get-StartScriptShortcutArguments {
   param([string]$StartScript)
-  $arguments = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$StartScript`" -CodexHome `"$CodexHome`""
+  $arguments = "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -STA -File `"$StartScript`" -CodexHome `"$CodexHome`""
   if ($NoLiveUsage) { $arguments += " -NoLiveUsage" }
   if ($NoStartCodex) { $arguments += " -NoStartCodex" }
   if (-not [string]::IsNullOrWhiteSpace($CodexAppPath)) {
@@ -198,7 +198,7 @@ if (-not $NoStartMenu) {
     $settingsShortcut = Join-Path $programFolder "Settings Codex Pet Limit Rings.lnk"
     $shortcut = $shell.CreateShortcut($settingsShortcut)
     $shortcut.TargetPath = $powerShell
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$settingsScript`""
+    $shortcut.Arguments = "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$settingsScript`""
     $shortcut.WorkingDirectory = $targetRoot
     $shortcut.WindowStyle = 7
     $shortcut.Description = "Open Codex Pet Limit Rings settings"

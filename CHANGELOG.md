@@ -5,6 +5,8 @@
 ### Fixed
 
 - Fixed release and install packaging so local development artifacts are not copied into fresh installs or release zips.
+- Made installed startup, Start Menu, and settings shortcuts launch PowerShell hidden so helper terminal windows do not remain open.
+- Made Codex Desktop auto-start prefer the Windows app identity through Explorer, detaching it from the helper launcher process.
 
 ## 0.1.1
 
