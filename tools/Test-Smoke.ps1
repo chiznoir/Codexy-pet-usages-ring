@@ -45,6 +45,28 @@ function Assert-NoForbiddenPaths {
   }
 }
 
+function Assert-VersionMetadata {
+  $version = (Get-Content -Raw -LiteralPath (Join-Path $root "VERSION")).Trim()
+  if ($version -notmatch '^\d+\.\d+\.\d+$') {
+    throw "VERSION must use MAJOR.MINOR.PATCH format. Found: $version"
+  }
+
+  $changelog = Get-Content -LiteralPath (Join-Path $root "CHANGELOG.md")
+  $latest = $changelog | Where-Object { $_ -match '^##\s+(\d+\.\d+\.\d+)\s*$' } | Select-Object -First 1
+  if (-not $latest -or $latest -notmatch "^##\s+$([regex]::Escape($version))\s*$") {
+    throw "Top CHANGELOG.md version must match VERSION $version."
+  }
+
+  foreach ($readmeName in @("README.md", "README.ko.md")) {
+    $readme = Get-Content -Raw -LiteralPath (Join-Path $root $readmeName)
+    if ($readme -notmatch [regex]::Escape("Version $version") -or $readme -notmatch [regex]::Escape("version-$version-")) {
+      throw "$readmeName version badge must match VERSION $version."
+    }
+  }
+
+  return $version
+}
+
 try {
   New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
@@ -55,6 +77,8 @@ try {
   Add-Fixture -RelativePath "docs/assets/current-pet-usage-capture.png"
   Add-Fixture -RelativePath "docs/assets/imagegen-hero-background.png"
   Add-Fixture -RelativePath "smoke.tmp"
+
+  $version = Assert-VersionMetadata
 
   $parseErrorsText = @()
   Get-ChildItem -LiteralPath $root -Recurse -Filter "*.ps1" | Where-Object { $_.FullName -notmatch '\\.git\\' } | ForEach-Object {
@@ -73,6 +97,9 @@ try {
   & (Join-Path $root "tools\New-ReleaseZip.ps1") -OutputDirectory $releaseOut | Out-Host
   $zip = Get-ChildItem -LiteralPath $releaseOut -Filter "*.zip" | Select-Object -First 1
   if (-not $zip) { throw "Release zip was not created." }
+  if ($zip.Name -ne "codex-pet-limit-rings-Win-$version.zip") {
+    throw "Release zip name must match VERSION $version. Found: $($zip.Name)"
+  }
 
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)

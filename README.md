@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img alt="Version 0.1.1" src="https://img.shields.io/badge/version-0.1.1-3CEBBD?style=for-the-badge"></a>
+  <a href="VERSION"><img alt="Version 0.1.2" src="https://img.shields.io/badge/version-0.1.2-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -187,8 +187,5 @@ Build a release zip:
 .\tools\New-ReleaseZip.ps1
 ```
 
-Run smoke checks:
-
-```powershell
-.\tools\Test-Smoke.ps1
-```
+Feature and bug-fix releases should update `VERSION`, the README badge, and the
+top `CHANGELOG.md` section together.

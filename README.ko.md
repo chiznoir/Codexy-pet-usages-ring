@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="VERSION"><img alt="Version 0.1.1" src="https://img.shields.io/badge/version-0.1.1-3CEBBD?style=for-the-badge"></a>
+  <a href="VERSION"><img alt="Version 0.1.2" src="https://img.shields.io/badge/version-0.1.2-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -186,8 +186,5 @@ Release zip 만들기:
 .\tools\New-ReleaseZip.ps1
 ```
 
-Smoke check 실행:
-
-```powershell
-.\tools\Test-Smoke.ps1
-```
+기능 추가와 버그 수정 release는 `VERSION`, README badge, `CHANGELOG.md`의
+최상단 버전을 함께 올립니다.
