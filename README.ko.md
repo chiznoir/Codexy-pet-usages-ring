@@ -69,6 +69,9 @@ Settings.bat
 Uninstall.bat
 ```
 
+설치본이 있으면 launcher는 자동으로
+`%LOCALAPPDATA%\CodexPetLimitRingsWin` 아래의 설치된 helper를 사용합니다.
+
 PowerShell:
 
 ```powershell

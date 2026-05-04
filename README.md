@@ -69,6 +69,9 @@ Settings.bat
 Uninstall.bat
 ```
 
+When an install exists, these launchers automatically use the installed helper
+under `%LOCALAPPDATA%\CodexPetLimitRingsWin`.
+
 PowerShell:
 
 ```powershell

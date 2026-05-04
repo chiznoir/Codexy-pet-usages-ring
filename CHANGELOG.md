@@ -9,6 +9,7 @@
 ### Fixed
 
 - Hardened the local settings server with a random per-session token for settings API requests.
+- Made CMD, Bash, and root `.bat` launchers automatically use the installed helper when an install exists.
 - Replaced broad stop/status process matching with exact project-script path checks and PID file tracking.
 - Required an install marker before `Uninstall.ps1 -RemoveFiles` recursively removes files.
 - Made uninstall remove shortcuts only when they point at the selected install directory.

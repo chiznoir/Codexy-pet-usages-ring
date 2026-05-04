@@ -7,4 +7,6 @@ case "$SCRIPT_PATH" in
 esac
 DIR=$(CDPATH= cd "$SCRIPT_DIR" && pwd)
 ROOT=$(CDPATH= cd "$DIR/../.." && pwd)
+. "$DIR/resolve-root.sh"
+ROOT=$(resolve_codex_pet_root "$ROOT" "Settings.ps1")
 sh "$DIR/run-powershell.sh" "$ROOT/bin/powershell/Settings.ps1" "$@"

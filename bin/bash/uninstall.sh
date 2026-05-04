@@ -8,5 +8,7 @@ case "$SCRIPT_PATH" in
 esac
 DIR=$(CDPATH= cd "$SCRIPT_DIR" && pwd) || exit 1
 ROOT=$(CDPATH= cd "$DIR/../.." && pwd) || exit 1
+. "$DIR/resolve-root.sh"
+ROOT=$(resolve_codex_pet_root "$ROOT" "Uninstall.ps1")
 sh "$DIR/run-powershell.sh" "$ROOT/bin/powershell/Uninstall.ps1" "$@"
 exit $?
