@@ -142,7 +142,6 @@ https://chatgpt.com/backend-api/wham/usage
 ## 주의
 
 - OpenAI 또는 Codex의 공식 기능이 아닙니다.
-- Codex Desktop, `app.asar`, `pet.json`, `spritesheet.webp`, pet package를 패치하지 않습니다.
 - Live usage endpoint는 문서화된 외부 API가 아니므로 바뀔 수 있습니다.
 - 링은 `/pet`가 열려 있을 때만 보입니다.
 
@@ -154,15 +153,24 @@ Repository URL:
 https://github.com/himomohi/Codexy-pet-usages-ring
 ```
 
-Repository root에서 `Install.bat`으로 설치하거나 아래 명령을 사용하세요:
+AI agent에게 아래 repository URL과 함께 Windows 설치를 요청하세요:
+
+```text
+Install Codex Pet Limit Rings for Windows from:
+https://github.com/himomohi/Codexy-pet-usages-ring
+
+If the repository is not local, clone it first. Then run Install.bat from the
+repository root. After installation, run Status.ps1 and Diagnose.ps1 to verify
+that the helper is installed, running, and waiting for or following /pet.
+```
+
+CLI equivalent:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\bin\powershell\Install.ps1
 .\bin\powershell\Status.ps1
 .\bin\powershell\Diagnose.ps1
 ```
-
-다른 installer를 검색하거나 Codex Desktop을 패치하지 마세요.
 
 ## 더 보기
 

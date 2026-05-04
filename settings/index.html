@@ -151,14 +151,26 @@
       border: 1px solid var(--line);
       overflow: hidden;
     }
-    .ring {
+    .preview-gauge {
       position: absolute;
-      border-radius: 50%;
-      border-style: solid;
-      inset: 31px;
+      inset: 0;
       transform: rotate(-18deg);
+      pointer-events: none;
     }
-    .ring.inner { inset: 45px; }
+    .gauge-track,
+    .gauge-ring {
+      fill: none;
+      transform-box: fill-box;
+      transform-origin: center;
+      vector-effect: non-scaling-stroke;
+    }
+    .gauge-track {
+      stroke-linecap: round;
+    }
+    .gauge-ring {
+      stroke-linecap: round;
+      transition: stroke 120ms ease, stroke-opacity 120ms ease, stroke-dasharray 120ms ease;
+    }
     .pet {
       position: absolute;
       left: 50%;
@@ -175,11 +187,16 @@
     .tooltip {
       position: absolute;
       left: 124px;
-      top: 88px;
+      top: 78px;
       padding: 5px 7px;
       font-size: 11px;
       line-height: 13px;
       white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .tooltip.inner {
+      left: 124px;
+      top: 118px;
     }
     .path {
       margin-top: 12px;
@@ -211,10 +228,17 @@
 
     <div class="preview-wrap">
       <div class="preview" aria-label="Ring preview">
-        <div class="ring outer" id="previewOuter"></div>
-        <div class="ring inner" id="previewInner"></div>
+        <svg class="preview-gauge" viewBox="0 0 220 220" aria-hidden="true">
+          <circle class="gauge-track" id="previewOuterTrack" cx="110" cy="110" r="78"></circle>
+          <circle class="gauge-track" id="previewInnerTrack" cx="110" cy="110" r="62"></circle>
+          <circle class="gauge-ring" id="previewOuter" cx="110" cy="110" r="78"></circle>
+          <circle class="gauge-ring" id="previewInner" cx="110" cy="110" r="62"></circle>
+          <circle class="gauge-ring" id="previewCaution" cx="110" cy="110" r="92"></circle>
+          <circle class="gauge-ring" id="previewWarning" cx="110" cy="110" r="92"></circle>
+        </svg>
         <div class="pet">PET</div>
         <div class="tooltip" id="previewTip">5h limit  90% left<br>Reset 4h 12m (22:27)</div>
+        <div class="tooltip inner" id="previewInnerTip">Weekly  64% left<br>Reset Tue 15:24</div>
       </div>
       <div>
         <p>Outer ring maps to the 5h limit. Inner ring maps to the weekly limit. Warning and caution colors appear when remaining usage is low.</p>
@@ -292,6 +316,13 @@
       return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     };
     const showStatus = (text) => { statusEl.textContent = text; };
+    const setCircle = (circle, ratio, offsetRatio = 0) => {
+      const radius = Number(circle.getAttribute('r'));
+      const circumference = 2 * Math.PI * radius;
+      const visible = Math.max(0.001, Math.min(1, ratio)) * circumference;
+      circle.style.strokeDasharray = `${visible} ${circumference}`;
+      circle.style.strokeDashoffset = `${-offsetRatio * circumference}`;
+    };
 
     function bind() {
       for (const input of inputs) {
@@ -303,6 +334,7 @@
     }
 
     function collect() {
+      if (!settings) return;
       for (const input of inputs) {
         const value = input.type === 'range' ? Number(input.value) : input.value;
         set(settings, input.dataset.path, value);
@@ -312,17 +344,41 @@
     }
 
     function updatePreview() {
+      if (!settings) return;
+      const outerTrack = document.getElementById('previewOuterTrack');
+      const innerTrack = document.getElementById('previewInnerTrack');
       const outer = document.getElementById('previewOuter');
       const inner = document.getElementById('previewInner');
+      const warning = document.getElementById('previewWarning');
+      const caution = document.getElementById('previewCaution');
       const tip = document.getElementById('previewTip');
-      outer.style.borderColor = rgba(settings.colors.primary, settings.opacity.primary);
-      outer.style.borderWidth = '7px';
-      inner.style.borderColor = rgba(settings.colors.secondary, settings.opacity.secondary);
-      inner.style.borderWidth = '5px';
+      const innerTip = document.getElementById('previewInnerTip');
+      outerTrack.style.stroke = rgba(settings.colors.track, settings.opacity.track);
+      outerTrack.style.strokeWidth = '8px';
+      innerTrack.style.stroke = rgba(settings.colors.track, settings.opacity.track);
+      innerTrack.style.strokeWidth = '6px';
+      outer.style.stroke = rgba(settings.colors.primary, settings.opacity.primary);
+      outer.style.strokeWidth = '7px';
+      inner.style.stroke = rgba(settings.colors.secondary, settings.opacity.secondary);
+      inner.style.strokeWidth = '5px';
+      caution.style.stroke = rgba(settings.colors.caution, settings.opacity.warning);
+      caution.style.strokeWidth = '4px';
+      warning.style.stroke = rgba(settings.colors.warning, settings.opacity.warning);
+      warning.style.strokeWidth = '4px';
+      setCircle(outerTrack, 1);
+      setCircle(innerTrack, 1);
+      setCircle(outer, 0.74);
+      setCircle(inner, 0.58);
+      setCircle(caution, 0.08, 0.67);
+      setCircle(warning, 0.08, 0.8);
       tip.style.color = rgba(settings.colors.readoutText, settings.opacity.readoutText);
       tip.style.background = rgba(settings.colors.outerReadoutBackground, settings.opacity.readout);
       tip.style.fontSize = `${settings.text.fontSize}px`;
       tip.style.lineHeight = `${settings.text.lineHeight}px`;
+      innerTip.style.color = rgba(settings.colors.readoutText, settings.opacity.readoutText);
+      innerTip.style.background = rgba(settings.colors.innerReadoutBackground, settings.opacity.readout);
+      innerTip.style.fontSize = `${settings.text.fontSize}px`;
+      innerTip.style.lineHeight = `${settings.text.lineHeight}px`;
     }
 
     async function load() {
@@ -356,7 +412,10 @@
       showStatus('Saved. Running rings will update automatically.');
     }
 
-    for (const input of inputs) input.addEventListener('input', collect);
+    for (const input of inputs) {
+      input.addEventListener('input', collect);
+      input.addEventListener('change', collect);
+    }
     document.getElementById('save').addEventListener('click', () => save().catch((error) => showStatus(error.message)));
     document.getElementById('reload').addEventListener('click', () => load().catch((error) => showStatus(error.message)));
     document.getElementById('reset').addEventListener('click', () => {

@@ -5,6 +5,7 @@
 ### Added
 
 - Added root `.bat` launchers for double-click install, start, stop, status, settings, and uninstall.
+- Added a live settings preview for ring colors, track opacity, warning/caution colors, readout backgrounds, and text sizing.
 
 ### Fixed
 

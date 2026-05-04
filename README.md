@@ -142,7 +142,6 @@ token and writes only the local `settings.json` file.
 ## Notes
 
 - This is not an official OpenAI or Codex feature.
-- It does not patch Codex Desktop, `app.asar`, `pet.json`, `spritesheet.webp`, or pet packages.
 - The live usage endpoint is not a documented third-party API and may change.
 - Rings appear only while `/pet` is open.
 
@@ -154,15 +153,25 @@ Repository URL:
 https://github.com/himomohi/Codexy-pet-usages-ring
 ```
 
-Install from the repository root with `Install.bat`, or use:
+Give an AI agent this repository URL and ask it to install the project on
+Windows:
+
+```text
+Install Codex Pet Limit Rings for Windows from:
+https://github.com/himomohi/Codexy-pet-usages-ring
+
+If the repository is not local, clone it first. Then run Install.bat from the
+repository root. After installation, run Status.ps1 and Diagnose.ps1 to verify
+that the helper is installed, running, and waiting for or following /pet.
+```
+
+CLI equivalent:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\bin\powershell\Install.ps1
 .\bin\powershell\Status.ps1
 .\bin\powershell\Diagnose.ps1
 ```
-
-Do not search for another installer or patch Codex Desktop.
 
 ## More
 
