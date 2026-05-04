@@ -5,6 +5,7 @@
 - Added a polished GitHub README hero image using an image-generated backdrop and a live local `/pet` usage capture.
 - Redesigned the README top image as a compact GitHub-style title bar with the live pet/ring capture.
 - Replaced the README title bar with an ImageGen-made mascot/ring banner and reduced duplicate top copy.
+- Renamed the README banner asset path to force GitHub to load the refreshed title bar.
 - Added README badges, version presentation, and clearer project navigation.
 - Clarified first-install behavior: immediate helper start, Windows startup registration, Codex Desktop auto-start, and `/pet` waiting.
 - Added copy-paste AI agent instructions for installing from this repo without separate web search.

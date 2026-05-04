@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/codex-pet-limit-rings-win-hero.png" alt="Codex Pet Limit Rings for Windows GitHub title bar" width="100%">
+  <img src="docs/assets/codex-pet-limit-rings-win-titlebar.png" alt="Codex Pet Limit Rings for Windows GitHub title bar" width="100%">
 </p>
 
 <p align="center">
@@ -410,7 +410,7 @@ codex-pet-limit-rings-Win/
     CodexPetLimitRings.ps1
   docs/
     assets/
-      codex-pet-limit-rings-win-hero.png
+      codex-pet-limit-rings-win-titlebar.png
       current-pet-usage-capture.png
       imagegen-hero-background.png
     architecture.md
