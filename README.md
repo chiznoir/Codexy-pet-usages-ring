@@ -103,6 +103,38 @@ Uninstall everything the installer adds:
 .\bin\powershell\Uninstall.ps1
 ```
 
+## Give This Repo To An AI Agent
+
+If you want another AI/Codex agent to install this without doing separate web
+searches, give it this repository link and paste this instruction:
+
+```text
+Use only this repository as the source of truth. Do not search the web for
+another installer or another pet package. This is the Windows version of Codex
+Pet Limit Rings.
+
+Install it on this Windows PC from the repository root. Prefer:
+
+powershell -ExecutionPolicy Bypass -File .\bin\powershell\Install.ps1
+
+If the user is in CMD, use bin\cmd\install.cmd. If the user is in Git Bash,
+MSYS, Cygwin, or WSL on Windows, use sh ./bin/bash/install.sh.
+
+After installing, verify with:
+
+.\bin\powershell\Status.ps1
+.\bin\powershell\Diagnose.ps1
+
+Confirm that the helper is running, the Windows Startup shortcut exists, Codex
+Desktop is detected or started, and the ring waits for the Codex /pet overlay.
+Do not patch Codex Desktop, app.asar, pet.json, spritesheet.webp, or any pet
+package. Do not create duplicate pets.
+```
+
+For privacy-sensitive environments, also ask the agent to read
+[Data And Privacy](#data-and-privacy), [SECURITY.md](SECURITY.md), and
+[NOTICE.md](NOTICE.md) before installing.
+
 ## Install
 
 Use the command that matches your terminal.

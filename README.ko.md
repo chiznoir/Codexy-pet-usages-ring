@@ -100,6 +100,39 @@ Installer가 Codex Desktop을 자동으로 찾아 실행을 시도합니다. 그
 .\bin\powershell\Uninstall.ps1
 ```
 
+## AI에게 이 repo로 설치 맡기기
+
+다른 AI/Codex agent에게 별도 검색 없이 이 프로그램을 설치하게 하려면, 이 GitHub
+repo 링크와 아래 지시문을 그대로 전달하세요:
+
+```text
+이 repository만 기준으로 사용하세요. 다른 installer, 다른 pet package, 다른
+구현을 찾기 위해 웹 검색하지 마세요. 이것은 Codex Pet Limit Rings의 Windows
+버전입니다.
+
+이 Windows PC에서 repository root 기준으로 설치하세요. 우선 아래 명령을
+사용하세요:
+
+powershell -ExecutionPolicy Bypass -File .\bin\powershell\Install.ps1
+
+사용자가 CMD에 있으면 bin\cmd\install.cmd를 사용하세요. 사용자가 Windows의
+Git Bash, MSYS, Cygwin, WSL에 있으면 sh ./bin/bash/install.sh를 사용하세요.
+
+설치 후 아래 명령으로 확인하세요:
+
+.\bin\powershell\Status.ps1
+.\bin\powershell\Diagnose.ps1
+
+helper가 실행 중인지, Windows 시작프로그램 shortcut이 있는지, Codex Desktop이
+감지되거나 실행되는지, Codex /pet overlay가 열릴 때까지 ring이 대기하는지
+확인하세요. Codex Desktop, app.asar, pet.json, spritesheet.webp, pet package는
+패치하지 마세요. 중복 pet을 만들지 마세요.
+```
+
+프라이버시가 중요한 환경이라면 설치 전에 이 README의
+[데이터와 프라이버시](#데이터와-프라이버시--data-and-privacy),
+[SECURITY.md](SECURITY.md), [NOTICE.md](NOTICE.md)도 읽으라고 지시하세요.
+
 ## 설치
 
 사용 중인 터미널에 맞는 명령을 실행하면 됩니다.
