@@ -7,150 +7,300 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #101318;
-      --panel: #171c22;
-      --panel-2: #1d242c;
-      --text: #f4f7fb;
-      --muted: #9ba8b7;
-      --line: #303946;
-      --accent: #3cebbd;
+      --bg: #0f1110;
+      --surface: #151815;
+      --surface-2: #1a1f1c;
+      --surface-3: #101410;
+      --text: #f4f1e8;
+      --muted: #a2aaa1;
+      --dim: #687168;
+      --line: #2b302c;
+      --line-soft: rgba(244, 241, 232, 0.075);
+      --accent: #4fc3a1;
+      --accent-deep: #17352d;
       --danger: #ff4238;
+      --caution: #d9a94b;
+      --shadow: 0 22px 70px -48px rgba(0, 0, 0, 0.86);
+      --radius: 8px;
     }
     * { box-sizing: border-box; }
+    html { background: var(--bg); }
     body {
       margin: 0;
-      min-height: 100vh;
-      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
+      min-height: 100dvh;
+      font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background:
+        linear-gradient(rgba(244, 241, 232, 0.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(244, 241, 232, 0.02) 1px, transparent 1px),
+        linear-gradient(135deg, rgba(79, 195, 161, 0.055), transparent 36%),
+        var(--bg);
+      background-size: 38px 38px, 38px 38px, auto, auto;
       color: var(--text);
+      text-rendering: optimizeLegibility;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.28;
+      background-image: radial-gradient(rgba(244, 241, 232, 0.14) 0.6px, transparent 0.6px);
+      background-size: 3px 3px;
     }
     main {
-      width: min(1040px, calc(100vw - 32px));
+      width: min(1180px, calc(100vw - 32px));
       margin: 0 auto;
-      padding: 28px 0 40px;
+      padding: 24px 0 36px;
     }
     header {
-      display: flex;
-      align-items: flex-end;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
       justify-content: space-between;
-      gap: 16px;
-      padding-bottom: 18px;
-      border-bottom: 1px solid var(--line);
+      gap: 24px;
+      padding: 10px 0 22px;
+    }
+    .kicker,
+    .preview-label {
+      margin: 0 0 9px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      text-transform: uppercase;
     }
     h1 {
-      margin: 0 0 6px;
-      font-size: 24px;
-      font-weight: 650;
+      margin: 0 0 8px;
+      max-width: 780px;
+      font-size: clamp(28px, 3.7vw, 46px);
+      font-weight: 740;
       letter-spacing: 0;
+      line-height: 1.02;
     }
     p {
       margin: 0;
       color: var(--muted);
-      line-height: 1.5;
+      line-height: 1.55;
       font-size: 13px;
     }
     .status {
-      min-width: 220px;
-      padding: 10px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 208px;
+      min-height: 38px;
+      padding: 9px 12px;
+      border-radius: var(--radius);
       border: 1px solid var(--line);
-      background: var(--panel);
+      background: rgba(21, 24, 21, 0.86);
+      box-shadow: inset 0 1px 0 rgba(244, 241, 232, 0.05);
       font-size: 12px;
       color: var(--muted);
       text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(79, 195, 161, 0.11);
+    }
+    .status[data-state="loading"]::before,
+    .status[data-state="saving"]::before {
+      animation: breathe 1.2s ease-in-out infinite;
+    }
+    .status[data-state="saved"]::before,
+    .status[data-state="ready"]::before,
+    .status[data-state="defaultsLoaded"]::before {
+      background: var(--accent);
+    }
+    .status[data-state="error"]::before,
+    .status[data-state="serverUnavailable"]::before {
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgba(255, 66, 56, 0.12);
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 374px;
+      gap: 18px;
+      align-items: start;
+    }
+    .controls {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
     }
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 14px;
-      margin-top: 18px;
     }
     section {
+      position: relative;
       border: 1px solid var(--line);
-      background: var(--panel);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(244, 241, 232, 0.035), transparent 82px),
+        rgba(21, 24, 21, 0.92);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(244, 241, 232, 0.045);
+      overflow: hidden;
       padding: 16px;
     }
     h2 {
-      margin: 0 0 14px;
-      font-size: 15px;
-      font-weight: 650;
+      margin: 0 0 13px;
+      color: #fff9ed;
+      font-size: 14px;
+      font-weight: 720;
       letter-spacing: 0;
+      line-height: 1.2;
     }
     .field {
       display: grid;
-      grid-template-columns: 168px minmax(0, 1fr) 72px;
-      gap: 10px;
+      grid-template-columns: minmax(112px, 0.62fr) minmax(112px, 1fr) 64px;
+      gap: 11px;
       align-items: center;
-      min-height: 38px;
-      border-top: 1px solid rgba(255,255,255,0.055);
+      min-height: 42px;
+      border-top: 1px solid var(--line-soft);
     }
     .field:first-of-type { border-top: 0; }
     label {
-      color: #dbe5ef;
+      color: #e4e9dd;
       font-size: 13px;
+      line-height: 1.25;
     }
     input[type="color"] {
-      inline-size: 44px;
-      block-size: 28px;
-      border: 0;
-      padding: 0;
-      background: transparent;
+      inline-size: 100%;
+      block-size: 30px;
+      border: 1px solid rgba(244, 241, 232, 0.13);
+      border-radius: 6px;
+      padding: 2px;
+      background: var(--surface-3);
+      cursor: pointer;
     }
     input[type="range"] {
       width: 100%;
       accent-color: var(--accent);
+      cursor: pointer;
     }
     select,
     input[type="number"], input[type="text"] {
       width: 100%;
-      height: 30px;
+      height: 34px;
       border: 1px solid var(--line);
-      background: var(--panel-2);
+      border-radius: 6px;
+      background: var(--surface-3);
       color: var(--text);
-      padding: 4px 8px;
+      padding: 5px 10px;
       font: inherit;
       font-size: 13px;
+      outline: none;
+      transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+    select:focus-visible,
+    input:focus-visible,
+    button:focus-visible {
+      border-color: rgba(79, 195, 161, 0.72);
+      box-shadow: 0 0 0 3px rgba(79, 195, 161, 0.12);
+      outline: none;
     }
     output {
       color: var(--muted);
-      font-size: 12px;
+      font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+      font-size: 11px;
       text-align: right;
       font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
     }
     .actions {
+      grid-column: 2;
       display: flex;
       gap: 10px;
       justify-content: flex-end;
-      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(21, 24, 21, 0.92);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(244, 241, 232, 0.045);
     }
     button {
-      min-height: 34px;
+      min-height: 36px;
+      border-radius: 7px;
       border: 1px solid var(--line);
-      background: var(--panel-2);
+      background: var(--surface-2);
       color: var(--text);
-      padding: 0 14px;
+      padding: 0 13px;
       font: inherit;
       font-size: 13px;
+      font-weight: 650;
       cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
     }
     button.primary {
-      border-color: rgba(60, 235, 189, 0.7);
-      background: #15342f;
+      border-color: rgba(79, 195, 161, 0.72);
+      background: linear-gradient(180deg, rgba(79, 195, 161, 0.24), rgba(23, 53, 45, 0.92));
+      color: #f4fff9;
     }
-    button:hover { border-color: var(--accent); }
-    .preview-wrap {
+    button:hover {
+      border-color: rgba(79, 195, 161, 0.88);
+      background: #1e2721;
+    }
+    button:active { transform: translateY(1px) scale(0.99); }
+    .preview-panel {
+      position: sticky;
+      top: 18px;
       display: grid;
-      grid-template-columns: 220px minmax(0, 1fr);
       gap: 14px;
-      margin-top: 14px;
-      align-items: center;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(180deg, rgba(79, 195, 161, 0.055), transparent 130px),
+        rgba(21, 24, 21, 0.94);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(244, 241, 232, 0.055);
+    }
+    .preview-panel h2 {
+      margin-bottom: 8px;
+      font-size: 19px;
+    }
+    .preview-label { margin-bottom: 8px; }
+    .preview-copy p { max-width: 34ch; }
+    .preview-shell {
+      display: grid;
+      place-items: center;
     }
     .preview {
       position: relative;
-      width: 220px;
+      width: min(100%, 220px);
       aspect-ratio: 1;
-      background: #0d1117;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(rgba(244, 241, 232, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(244, 241, 232, 0.035) 1px, transparent 1px),
+        linear-gradient(145deg, rgba(79, 195, 161, 0.12), transparent 58%),
+        #0e120f;
+      background-size: 22px 22px, 22px 22px, auto, auto;
       border: 1px solid var(--line);
       overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(244, 241, 232, 0.055);
+    }
+    .preview::before,
+    .preview::after {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 0;
+      width: 100%;
+      height: 1px;
+      background: rgba(244, 241, 232, 0.06);
+      pointer-events: none;
+    }
+    .preview::after {
+      inset: 0 auto auto 50%;
+      width: 1px;
+      height: 100%;
     }
     .preview-gauge {
       position: absolute;
@@ -174,7 +324,7 @@
     }
     .hover-range {
       fill: none;
-      stroke: rgba(255,255,255,0.18);
+      stroke: rgba(244, 241, 232, 0.24);
       stroke-width: 1.5px;
       stroke-dasharray: 4 5;
       transition: r 160ms ease, opacity 160ms ease;
@@ -188,134 +338,209 @@
       height: 78px;
       display: grid;
       place-items: center;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: #151a20;
-      font-size: 32px;
+      border: 1px solid rgba(244, 241, 232, 0.16);
+      border-radius: 7px;
+      background:
+        linear-gradient(145deg, rgba(244, 241, 232, 0.1), transparent 42%),
+        #151915;
+      box-shadow: 0 16px 34px -26px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(244, 241, 232, 0.08);
+      color: #f5f3e8;
+      font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
     }
     .tooltip {
       position: absolute;
-      left: 124px;
-      top: 78px;
-      padding: 5px 7px;
+      left: 112px;
+      top: 74px;
+      width: 98px;
+      padding: 6px 8px;
+      border-radius: 6px;
       font-size: 11px;
       line-height: 13px;
-      white-space: nowrap;
-      border: 1px solid rgba(255,255,255,0.1);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      border: 1px solid rgba(244, 241, 232, 0.1);
+      box-shadow: 0 10px 30px -22px rgba(0, 0, 0, 0.9);
+      font-variant-numeric: tabular-nums;
     }
     .tooltip.inner {
-      left: 124px;
-      top: 118px;
+      left: 112px;
+      top: 122px;
+    }
+    .path-row {
+      display: grid;
+      gap: 7px;
+    }
+    .path-label {
+      color: var(--dim);
+      font-size: 11px;
+      font-weight: 720;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
     .path {
-      margin-top: 12px;
-      padding: 10px 12px;
+      padding: 10px 11px;
       border: 1px solid var(--line);
-      background: var(--panel);
+      border-radius: 7px;
+      background: var(--surface-3);
       color: var(--muted);
-      font-size: 12px;
+      font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
       overflow-wrap: anywhere;
     }
+    @keyframes breathe {
+      0%, 100% { opacity: 0.55; transform: scale(0.86); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+      }
+    }
     @media (max-width: 760px) {
-      header, .preview-wrap { display: block; }
+      main {
+        width: min(100% - 24px, 560px);
+        padding-top: 14px;
+      }
+      header { grid-template-columns: 1fr; gap: 14px; }
+      h1 { font-size: 28px; }
+      .workspace { grid-template-columns: 1fr; }
+      .preview-panel {
+        position: static;
+        order: -1;
+      }
       .grid { grid-template-columns: 1fr; }
-      .status { margin-top: 12px; text-align: left; }
-      .field { grid-template-columns: 126px minmax(0, 1fr) 58px; }
-      .preview { margin-bottom: 12px; }
+      .status {
+        justify-content: flex-start;
+        width: 100%;
+        text-align: left;
+      }
+      .field {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 11px 0;
+      }
+      output { text-align: left; }
+      .actions {
+        grid-column: auto;
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      button { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
+  <main class="app-shell">
+    <header class="topbar">
       <div>
+        <div class="kicker" data-i18n="appKicker">Local Companion Surface</div>
         <h1 data-i18n="title">Codex Pet Limit Rings Settings</h1>
         <p data-i18n="subtitle">Customize ring colors, opacity, hover behavior, and hover text size. Changes are saved to settings.json and picked up by the running helper.</p>
       </div>
       <div class="status" id="status" data-i18n="loading">Loading...</div>
     </header>
 
-    <div class="preview-wrap">
-      <div class="preview" aria-label="Ring preview">
-        <svg class="preview-gauge" viewBox="0 0 220 220" aria-hidden="true">
-          <circle class="gauge-track" id="previewOuterTrack" cx="110" cy="110" r="78"></circle>
-          <circle class="gauge-track" id="previewInnerTrack" cx="110" cy="110" r="62"></circle>
-          <circle class="gauge-ring" id="previewOuter" cx="110" cy="110" r="78"></circle>
-          <circle class="gauge-ring" id="previewInner" cx="110" cy="110" r="62"></circle>
-          <circle class="gauge-ring" id="previewCaution" cx="110" cy="110" r="92"></circle>
-          <circle class="gauge-ring" id="previewWarning" cx="110" cy="110" r="92"></circle>
-          <circle class="hover-range" id="previewHoverRange" cx="110" cy="110" r="92"></circle>
-        </svg>
-        <div class="pet" data-i18n="pet">PET</div>
-        <div class="tooltip" id="previewTip">5h limit  90% left<br>Reset 4h 12m (22:27)</div>
-        <div class="tooltip inner" id="previewInnerTip">Weekly  64% left<br>Reset Tue 15:24</div>
-      </div>
-      <div>
-        <p data-i18n="previewDescription">Outer ring maps to the 5h limit. Inner ring maps to the weekly limit. Warning and caution colors appear when remaining usage is low.</p>
-        <div class="path" id="path">settings.json</div>
-      </div>
-    </div>
+    <div class="workspace">
+      <div class="controls">
+        <section>
+          <h2 data-i18n="sectionGeneral">General</h2>
+          <div class="field">
+            <label for="language" data-i18n="language">Language</label>
+            <select id="language" data-path="language">
+              <option value="auto" data-i18n="languageAuto">Auto</option>
+              <option value="ko" data-i18n="languageKo">Korean</option>
+              <option value="en" data-i18n="languageEn">English</option>
+              <option value="ja" data-i18n="languageJa">Japanese</option>
+              <option value="zh" data-i18n="languageZh">Chinese</option>
+            </select>
+            <output></output>
+          </div>
+        </section>
 
-    <div class="grid">
-      <section>
-        <h2 data-i18n="sectionGeneral">General</h2>
-        <div class="field">
-          <label for="language" data-i18n="language">Language</label>
-          <select id="language" data-path="language">
-            <option value="auto" data-i18n="languageAuto">Auto</option>
-            <option value="ko" data-i18n="languageKo">Korean</option>
-            <option value="en" data-i18n="languageEn">English</option>
-            <option value="ja" data-i18n="languageJa">Japanese</option>
-            <option value="zh" data-i18n="languageZh">Chinese</option>
-          </select>
-          <output></output>
+        <div class="grid">
+          <section>
+            <h2 data-i18n="sectionRingColors">Ring Colors</h2>
+            <div class="field"><label for="primary" data-i18n="outer5h">Outer 5h</label><input id="primary" type="color" data-path="colors.primary"><output></output></div>
+            <div class="field"><label for="secondary" data-i18n="innerWeekly">Inner Weekly</label><input id="secondary" type="color" data-path="colors.secondary"><output></output></div>
+            <div class="field"><label for="warning" data-i18n="warning">Warning</label><input id="warning" type="color" data-path="colors.warning"><output></output></div>
+            <div class="field"><label for="caution" data-i18n="caution">Caution</label><input id="caution" type="color" data-path="colors.caution"><output></output></div>
+            <div class="field"><label for="track" data-i18n="track">Track</label><input id="track" type="color" data-path="colors.track"><output></output></div>
+          </section>
+
+          <section>
+            <h2 data-i18n="sectionReadoutColors">Readout Colors</h2>
+            <div class="field"><label for="readoutText" data-i18n="textColor">Text</label><input id="readoutText" type="color" data-path="colors.readoutText"><output></output></div>
+            <div class="field"><label for="outerBg" data-i18n="outerBackground">Outer Background</label><input id="outerBg" type="color" data-path="colors.outerReadoutBackground"><output></output></div>
+            <div class="field"><label for="innerBg" data-i18n="innerBackground">Inner Background</label><input id="innerBg" type="color" data-path="colors.innerReadoutBackground"><output></output></div>
+          </section>
+
+          <section>
+            <h2 data-i18n="sectionOpacity">Opacity</h2>
+            <div class="field"><label for="opPrimary" data-i18n="outer">Outer</label><input id="opPrimary" type="range" min="0" max="1" step="0.01" data-path="opacity.primary"><output></output></div>
+            <div class="field"><label for="opSecondary" data-i18n="inner">Inner</label><input id="opSecondary" type="range" min="0" max="1" step="0.01" data-path="opacity.secondary"><output></output></div>
+            <div class="field"><label for="opWarning" data-i18n="warning">Warning</label><input id="opWarning" type="range" min="0" max="1" step="0.01" data-path="opacity.warning"><output></output></div>
+            <div class="field"><label for="opTrack" data-i18n="track">Track</label><input id="opTrack" type="range" min="0" max="1" step="0.01" data-path="opacity.track"><output></output></div>
+            <div class="field"><label for="opReadout" data-i18n="readoutBackground">Readout Background</label><input id="opReadout" type="range" min="0" max="1" step="0.01" data-path="opacity.readout"><output></output></div>
+            <div class="field"><label for="opReadoutText" data-i18n="readoutTextOpacity">Readout Text</label><input id="opReadoutText" type="range" min="0" max="1" step="0.01" data-path="opacity.readoutText"><output></output></div>
+          </section>
+
+          <section>
+            <h2 data-i18n="sectionText">Text</h2>
+            <div class="field"><label for="fontSize" data-i18n="fontSize">Font Size</label><input id="fontSize" type="range" min="8" max="24" step="0.5" data-path="text.fontSize"><output></output></div>
+            <div class="field"><label for="lineHeight" data-i18n="lineHeight">Line Height</label><input id="lineHeight" type="range" min="10" max="32" step="0.5" data-path="text.lineHeight"><output></output></div>
+          </section>
+
+          <section>
+            <h2 data-i18n="sectionHover">Hover Behavior</h2>
+            <div class="field"><label for="ringGap" data-i18n="ringGap">Pet-Ring Distance</label><input id="ringGap" type="range" min="0" max="96" step="1" data-path="layout.ringGap" data-unit="px"><output></output></div>
+            <div class="field"><label for="hoverRange" data-i18n="hoverRange">Ring Range</label><input id="hoverRange" type="range" min="0" max="96" step="1" data-path="behavior.hoverRange" data-unit="px"><output></output></div>
+            <div class="field"><label for="fadeInMs" data-i18n="fadeIn">Fade In</label><input id="fadeInMs" type="range" min="0" max="1000" step="10" data-path="behavior.fadeInMs" data-unit="ms"><output></output></div>
+            <div class="field"><label for="fadeOutMs" data-i18n="fadeOut">Fade Out</label><input id="fadeOutMs" type="range" min="0" max="1000" step="10" data-path="behavior.fadeOutMs" data-unit="ms"><output></output></div>
+          </section>
         </div>
-      </section>
+      </div>
 
-      <section>
-        <h2 data-i18n="sectionRingColors">Ring Colors</h2>
-        <div class="field"><label for="primary" data-i18n="outer5h">Outer 5h</label><input id="primary" type="color" data-path="colors.primary"><output></output></div>
-        <div class="field"><label for="secondary" data-i18n="innerWeekly">Inner Weekly</label><input id="secondary" type="color" data-path="colors.secondary"><output></output></div>
-        <div class="field"><label for="warning" data-i18n="warning">Warning</label><input id="warning" type="color" data-path="colors.warning"><output></output></div>
-        <div class="field"><label for="caution" data-i18n="caution">Caution</label><input id="caution" type="color" data-path="colors.caution"><output></output></div>
-        <div class="field"><label for="track" data-i18n="track">Track</label><input id="track" type="color" data-path="colors.track"><output></output></div>
-      </section>
-
-      <section>
-        <h2 data-i18n="sectionReadoutColors">Readout Colors</h2>
-        <div class="field"><label for="readoutText" data-i18n="textColor">Text</label><input id="readoutText" type="color" data-path="colors.readoutText"><output></output></div>
-        <div class="field"><label for="outerBg" data-i18n="outerBackground">Outer Background</label><input id="outerBg" type="color" data-path="colors.outerReadoutBackground"><output></output></div>
-        <div class="field"><label for="innerBg" data-i18n="innerBackground">Inner Background</label><input id="innerBg" type="color" data-path="colors.innerReadoutBackground"><output></output></div>
-      </section>
-
-      <section>
-        <h2 data-i18n="sectionOpacity">Opacity</h2>
-        <div class="field"><label for="opPrimary" data-i18n="outer">Outer</label><input id="opPrimary" type="range" min="0" max="1" step="0.01" data-path="opacity.primary"><output></output></div>
-        <div class="field"><label for="opSecondary" data-i18n="inner">Inner</label><input id="opSecondary" type="range" min="0" max="1" step="0.01" data-path="opacity.secondary"><output></output></div>
-        <div class="field"><label for="opWarning" data-i18n="warning">Warning</label><input id="opWarning" type="range" min="0" max="1" step="0.01" data-path="opacity.warning"><output></output></div>
-        <div class="field"><label for="opTrack" data-i18n="track">Track</label><input id="opTrack" type="range" min="0" max="1" step="0.01" data-path="opacity.track"><output></output></div>
-        <div class="field"><label for="opReadout" data-i18n="readoutBackground">Readout Background</label><input id="opReadout" type="range" min="0" max="1" step="0.01" data-path="opacity.readout"><output></output></div>
-        <div class="field"><label for="opReadoutText" data-i18n="readoutTextOpacity">Readout Text</label><input id="opReadoutText" type="range" min="0" max="1" step="0.01" data-path="opacity.readoutText"><output></output></div>
-      </section>
-
-      <section>
-        <h2 data-i18n="sectionText">Text</h2>
-        <div class="field"><label for="fontSize" data-i18n="fontSize">Font Size</label><input id="fontSize" type="range" min="8" max="24" step="0.5" data-path="text.fontSize"><output></output></div>
-        <div class="field"><label for="lineHeight" data-i18n="lineHeight">Line Height</label><input id="lineHeight" type="range" min="10" max="32" step="0.5" data-path="text.lineHeight"><output></output></div>
-      </section>
-
-      <section>
-        <h2 data-i18n="sectionHover">Hover Behavior</h2>
-        <div class="field"><label for="ringGap" data-i18n="ringGap">Pet-Ring Distance</label><input id="ringGap" type="range" min="0" max="96" step="1" data-path="layout.ringGap" data-unit="px"><output></output></div>
-        <div class="field"><label for="hoverRange" data-i18n="hoverRange">Ring Range</label><input id="hoverRange" type="range" min="0" max="96" step="1" data-path="behavior.hoverRange" data-unit="px"><output></output></div>
-        <div class="field"><label for="fadeInMs" data-i18n="fadeIn">Fade In</label><input id="fadeInMs" type="range" min="0" max="1000" step="10" data-path="behavior.fadeInMs" data-unit="ms"><output></output></div>
-        <div class="field"><label for="fadeOutMs" data-i18n="fadeOut">Fade Out</label><input id="fadeOutMs" type="range" min="0" max="1000" step="10" data-path="behavior.fadeOutMs" data-unit="ms"><output></output></div>
-      </section>
-    </div>
-
-    <div class="actions">
-      <button id="reload" data-i18n="reload">Reload</button>
-      <button id="reset" data-i18n="resetDefaults">Reset Defaults</button>
-      <button class="primary" id="save" data-i18n="save">Save</button>
+      <aside class="preview-panel" aria-labelledby="previewTitle">
+        <div class="preview-copy">
+          <div class="preview-label" data-i18n="previewLabel">Live Preview</div>
+          <h2 id="previewTitle" data-i18n="previewTitle">Ring Preview</h2>
+          <p data-i18n="previewDescription">Outer ring maps to the 5h limit. Inner ring maps to the weekly limit. Warning and caution colors appear when remaining usage is low.</p>
+        </div>
+        <div class="preview-shell">
+          <div class="preview" aria-label="Ring preview">
+            <svg class="preview-gauge" viewBox="0 0 220 220" aria-hidden="true">
+              <circle class="gauge-track" id="previewOuterTrack" cx="110" cy="110" r="78"></circle>
+              <circle class="gauge-track" id="previewInnerTrack" cx="110" cy="110" r="62"></circle>
+              <circle class="gauge-ring" id="previewOuter" cx="110" cy="110" r="78"></circle>
+              <circle class="gauge-ring" id="previewInner" cx="110" cy="110" r="62"></circle>
+              <circle class="gauge-ring" id="previewCaution" cx="110" cy="110" r="92"></circle>
+              <circle class="gauge-ring" id="previewWarning" cx="110" cy="110" r="92"></circle>
+              <circle class="hover-range" id="previewHoverRange" cx="110" cy="110" r="92"></circle>
+            </svg>
+            <div class="pet" data-i18n="pet">PET</div>
+            <div class="tooltip" id="previewTip">5h 90% left<br>Reset 22:27</div>
+            <div class="tooltip inner" id="previewInnerTip">Week 64% left<br>Tue 15:24</div>
+          </div>
+        </div>
+        <div class="path-row">
+          <div class="path-label" data-i18n="settingsFile">Settings File</div>
+          <div class="path" id="path">settings.json</div>
+        </div>
+      </aside>
+      <div class="actions">
+        <button id="reload" data-i18n="reload">Reload</button>
+        <button id="reset" data-i18n="resetDefaults">Reset Defaults</button>
+        <button class="primary" id="save" data-i18n="save">Save</button>
+      </div>
     </div>
   </main>
 
@@ -331,8 +556,9 @@
 
     const translations = {
       en: {
+        appKicker: 'Local Companion Surface',
         title: 'Codex Pet Limit Rings Settings',
-        subtitle: 'Customize ring colors, opacity, language, layout, hover behavior, and hover text size. Changes are saved to settings.json and picked up by the running helper.',
+        subtitle: 'Tune the desktop rings with a focused control surface for color, spacing, timing, and readout legibility.',
         loading: 'Loading...',
         ready: 'Ready',
         saving: 'Saving...',
@@ -340,7 +566,10 @@
         defaultsLoaded: 'Defaults loaded. Save to apply.',
         serverUnavailable: 'Settings server is not available.',
         launchHint: 'Launch this page with Settings.bat or bin\\powershell\\Settings.ps1.',
-        previewDescription: 'Outer ring maps to the 5h limit. Inner ring maps to the weekly limit. Warning and caution colors appear when remaining usage is low.',
+        previewLabel: 'Live Preview',
+        previewTitle: 'Ring Preview',
+        previewDescription: 'Ring geometry, readout opacity, and alert colors update here as you edit.',
+        settingsFile: 'Settings File',
         pet: 'PET',
         sectionGeneral: 'General',
         language: 'Language',
@@ -375,12 +604,13 @@
         reload: 'Reload',
         resetDefaults: 'Reset Defaults',
         save: 'Save',
-        previewOuter: '5h limit  90% left<br>Reset 4h 12m (22:27)',
-        previewInner: 'Weekly  64% left<br>Reset Tue 15:24'
+        previewOuter: '5h 90% left<br>Reset 22:27',
+        previewInner: 'Week 64% left<br>Tue 15:24'
       },
       ko: {
+        appKicker: '로컬 설정 화면',
         title: 'Codex Pet 사용량 링 설정',
-        subtitle: '링 색상, 투명도, 언어, 배치, 호버 동작, 사용량 텍스트 크기를 조정합니다. 변경값은 settings.json에 저장되고 실행 중인 helper에 반영됩니다.',
+        subtitle: '색상, 간격, 타이밍, 사용량 표시를 한 화면에서 정교하게 조정합니다.',
         loading: '불러오는 중...',
         ready: '준비됨',
         saving: '저장 중...',
@@ -388,7 +618,10 @@
         defaultsLoaded: '기본값을 불러왔습니다. 적용하려면 저장하세요.',
         serverUnavailable: '설정 서버를 사용할 수 없습니다.',
         launchHint: 'Settings.bat 또는 bin\\powershell\\Settings.ps1로 이 페이지를 실행하세요.',
-        previewDescription: '바깥 링은 5h 한도, 안쪽 링은 주간 한도를 나타냅니다. 남은 사용량이 적으면 주의/위험 색상이 표시됩니다.',
+        previewLabel: '실시간 미리보기',
+        previewTitle: '링 프리뷰',
+        previewDescription: '편집하는 값에 맞춰 링 간격, 표시 투명도, 경고 색상이 함께 반영됩니다.',
+        settingsFile: '설정 파일',
         pet: 'PET',
         sectionGeneral: '일반',
         language: '언어',
@@ -423,12 +656,13 @@
         reload: '다시 불러오기',
         resetDefaults: '기본값 복원',
         save: '저장',
-        previewOuter: '5h 한도  90% 남음<br>재설정 4시간 12분 (22:27)',
-        previewInner: '주간  64% 남음<br>재설정 화 15:24'
+        previewOuter: '5h 90% 남음<br>재설정 22:27',
+        previewInner: '주간 64% 남음<br>화 15:24'
       },
       ja: {
+        appKicker: 'ローカル設定画面',
         title: 'Codex Pet 使用量リング設定',
-        subtitle: 'リングの色、不透明度、言語、配置、ホバー動作、使用量テキストのサイズを調整します。変更は settings.json に保存され、実行中の helper に反映されます。',
+        subtitle: '色、間隔、タイミング、使用量表示を一つの画面で細かく調整します。',
         loading: '読み込み中...',
         ready: '準備完了',
         saving: '保存中...',
@@ -436,7 +670,10 @@
         defaultsLoaded: '既定値を読み込みました。適用するには保存してください。',
         serverUnavailable: '設定サーバーを利用できません。',
         launchHint: 'Settings.bat または bin\\powershell\\Settings.ps1 でこのページを開いてください。',
-        previewDescription: '外側のリングは 5h 制限、内側のリングは週次制限を表します。残り使用量が少ないと警告/注意色が表示されます。',
+        previewLabel: 'ライブプレビュー',
+        previewTitle: 'リングプレビュー',
+        previewDescription: '編集中の値に合わせてリング間隔、表示の不透明度、警告色が反映されます。',
+        settingsFile: '設定ファイル',
         pet: 'PET',
         sectionGeneral: '一般',
         language: '言語',
@@ -471,12 +708,13 @@
         reload: '再読み込み',
         resetDefaults: '既定値に戻す',
         save: '保存',
-        previewOuter: '5h 制限  残り90%<br>リセット 4時間 12分 (22:27)',
-        previewInner: '週次  残り64%<br>リセット 火 15:24'
+        previewOuter: '5h 残り90%<br>リセット 22:27',
+        previewInner: '週次 残り64%<br>火 15:24'
       },
       zh: {
+        appKicker: '本地设置界面',
         title: 'Codex Pet 使用量圆环设置',
-        subtitle: '自定义圆环颜色、透明度、语言、布局、悬停行为和使用量文字大小。更改会保存到 settings.json，并由正在运行的 helper 自动读取。',
+        subtitle: '在一个界面中精细调整颜色、间距、时序和使用量提示。',
         loading: '正在加载...',
         ready: '已就绪',
         saving: '正在保存...',
@@ -484,7 +722,10 @@
         defaultsLoaded: '已加载默认值。保存后应用。',
         serverUnavailable: '设置服务器不可用。',
         launchHint: '请使用 Settings.bat 或 bin\\powershell\\Settings.ps1 打开此页面。',
-        previewDescription: '外圈对应 5h 限制，内圈对应每周限制。剩余使用量较低时会显示警告/注意颜色。',
+        previewLabel: '实时预览',
+        previewTitle: '圆环预览',
+        previewDescription: '编辑时会同步反映圆环间距、提示透明度和警告颜色。',
+        settingsFile: '设置文件',
         pet: 'PET',
         sectionGeneral: '常规',
         language: '语言',
@@ -519,8 +760,8 @@
         reload: '重新加载',
         resetDefaults: '恢复默认值',
         save: '保存',
-        previewOuter: '5h 限制  剩余90%<br>重置 4小时 12分钟 (22:27)',
-        previewInner: '每周  剩余64%<br>重置 周二 15:24'
+        previewOuter: '5h 剩余90%<br>重置 22:27',
+        previewInner: '每周 剩余64%<br>周二 15:24'
       }
     };
 
@@ -583,6 +824,7 @@
     };
     const showStatus = (text) => {
       statusKey = translations.en[text] ? text : '';
+      statusEl.dataset.state = statusKey || 'error';
       statusEl.textContent = statusKey ? t(statusKey) : text;
     };
     const setCircle = (circle, ratio, offsetRatio = 0) => {

@@ -1,6 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "CODEX_PET_USE_REPO=1"
 call "%~dp0bin\cmd\settings.cmd" %*
 set "EXITCODE=%ERRORLEVEL%"
 echo.
