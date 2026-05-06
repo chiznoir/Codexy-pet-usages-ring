@@ -28,7 +28,7 @@
 I kept checking my Codex usage every few minutes.
 So I made the rings follow the pet instead.
 
-Codex Pet Limit Rings for Windows draws translucent usage-limit rings around
+Codexy pet usages ring draws translucent usage-limit rings around
 the Codex Desktop `/pet` avatar. It is a Windows companion implementation of
 [petergpt/codex-pet-limit-rings](https://github.com/petergpt/codex-pet-limit-rings)
 using PowerShell, WPF, and Win32 window positioning.
@@ -182,7 +182,7 @@ Give an AI agent this repository URL and ask it to install the project on
 Windows:
 
 ```text
-Install Codex Pet Limit Rings for Windows from:
+Install Codexy pet usages ring from:
 https://github.com/himomohi/Codexy-pet-usages-ring
 
 If the repository is not local, clone it first. Then run Install.bat from the

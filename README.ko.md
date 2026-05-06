@@ -25,7 +25,7 @@
   · <a href="README.zh.md">中文</a>
 </p>
 
-Codex Pet Limit Rings for Windows는 Codex Desktop `/pet` 아바타 주변에 반투명
+Codexy pet usages ring은 Codex Desktop `/pet` 아바타 주변에 반투명
 사용량 링을 표시하는 companion overlay입니다.
 [petergpt/codex-pet-limit-rings](https://github.com/petergpt/codex-pet-limit-rings)
 의 companion-app 방식을 Windows용 PowerShell, WPF, Win32 창 제어로 구현했습니다.
@@ -178,7 +178,7 @@ https://github.com/himomohi/Codexy-pet-usages-ring
 AI agent에게 아래 repository URL과 함께 Windows 설치를 요청하세요:
 
 ```text
-Install Codex Pet Limit Rings for Windows from:
+Install Codexy pet usages ring from:
 https://github.com/himomohi/Codexy-pet-usages-ring
 
 If the repository is not local, clone it first. Then run Install.bat from the

@@ -25,7 +25,7 @@
   · <span>中文</span>
 </p>
 
-Codex Pet Limit Rings for Windows 会在 Codex Desktop 的 `/pet` 头像周围绘制半透明的
+Codexy pet usages ring 会在 Codex Desktop 的 `/pet` 头像周围绘制半透明的
 用量限制圆环。它是
 [petergpt/codex-pet-limit-rings](https://github.com/petergpt/codex-pet-limit-rings)
 的 Windows companion 实现，使用 PowerShell、WPF 和 Win32 窗口定位。
@@ -176,7 +176,7 @@ https://github.com/himomohi/Codexy-pet-usages-ring
 可以把下面的 repository URL 交给 AI agent，让它在 Windows 上安装:
 
 ```text
-Install Codex Pet Limit Rings for Windows from:
+Install Codexy pet usages ring from:
 https://github.com/himomohi/Codexy-pet-usages-ring
 
 If the repository is not local, clone it first. Then run Install.bat from the
