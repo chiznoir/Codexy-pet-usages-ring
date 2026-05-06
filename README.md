@@ -39,6 +39,11 @@ using PowerShell, WPF, and Win32 window positioning.
   </a>
 </p>
 
+<p align="center">
+  Stop checking usage pages every few minutes.<br>
+  Let the pet tell you instead.
+</p>
+
 <!-- Features -->
 
 ## Features

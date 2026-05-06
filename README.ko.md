@@ -36,6 +36,11 @@ Codexy pet usages ring은 Codex Desktop `/pet` 아바타 주변에 반투명
   </a>
 </p>
 
+<p align="center">
+  몇 분마다 사용량 페이지를 확인하지 마세요.<br>
+  대신 pet이 알려주게 두세요.
+</p>
+
 <!-- Features -->
 
 ## 기능
