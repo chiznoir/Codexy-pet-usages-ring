@@ -11,7 +11,7 @@ $version = if (Test-Path -LiteralPath $versionFile) {
 } else {
   "0.1.0"
 }
-$name = "codex-pet-limit-rings-Win-$version"
+$name = "Codexy-pet-usages-ring-$version"
 $staging = Join-Path $env:TEMP $name
 $zipPath = Join-Path $OutputDirectory "$name.zip"
 

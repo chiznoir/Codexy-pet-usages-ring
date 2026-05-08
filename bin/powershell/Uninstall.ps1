@@ -1,12 +1,12 @@
 param(
-  [string]$InstallDir = "$env:LOCALAPPDATA\CodexPetLimitRingsWin",
+  [string]$InstallDir = "$env:LOCALAPPDATA\CodexyPetUsagesRing",
   [switch]$RemoveFiles
 )
 
 $ErrorActionPreference = "Stop"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-  throw "Codex Pet Limit Rings for Windows can only run on Windows."
+  throw "Codexy pet usages ring can only run on Windows."
 }
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
@@ -52,25 +52,38 @@ if (Test-Path -LiteralPath $stopScript) {
 }
 
 $startup = [Environment]::GetFolderPath("Startup")
-$startupShortcut = Join-Path $startup "Codex Pet Limit Rings.lnk"
-if (Test-ShortcutTargetsInstallDir -ShortcutPath $startupShortcut -InstallRoot $targetRoot) {
-  Remove-Item -LiteralPath $startupShortcut -Force
-  Write-Output "Removed startup shortcut: $startupShortcut"
+$startupShortcuts = @(
+  (Join-Path $startup "Codexy pet usages ring.lnk"),
+  (Join-Path $startup "Codex Pet Limit Rings.lnk")
+)
+foreach ($startupShortcut in $startupShortcuts) {
+  if (Test-ShortcutTargetsInstallDir -ShortcutPath $startupShortcut -InstallRoot $targetRoot) {
+    Remove-Item -LiteralPath $startupShortcut -Force
+    Write-Output "Removed startup shortcut: $startupShortcut"
+  }
 }
 
-$programShortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Codex Pet Limit Rings\Start Codex Pet Limit Rings.lnk"
-if (Test-ShortcutTargetsInstallDir -ShortcutPath $programShortcut -InstallRoot $targetRoot) {
-  Remove-Item -LiteralPath $programShortcut -Force
-  Write-Output "Removed Start Menu shortcut: $programShortcut"
-}
-$settingsShortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Codex Pet Limit Rings\Settings Codex Pet Limit Rings.lnk"
-if (Test-ShortcutTargetsInstallDir -ShortcutPath $settingsShortcut -InstallRoot $targetRoot) {
-  Remove-Item -LiteralPath $settingsShortcut -Force
-  Write-Output "Removed settings shortcut: $settingsShortcut"
-}
-$programFolder = Split-Path -Parent $programShortcut
-if ((Test-Path -LiteralPath $programFolder) -and -not (Get-ChildItem -LiteralPath $programFolder -Force)) {
-  Remove-Item -LiteralPath $programFolder -Force
+$programs = [Environment]::GetFolderPath("Programs")
+$programFolders = @(
+  (Join-Path $programs "Codexy pet usages ring"),
+  (Join-Path $programs "Codex Pet Limit Rings")
+)
+foreach ($programFolder in $programFolders) {
+  $programShortcuts = @(
+    (Join-Path $programFolder "Start Codexy pet usages ring.lnk"),
+    (Join-Path $programFolder "Settings Codexy pet usages ring.lnk"),
+    (Join-Path $programFolder "Start Codex Pet Limit Rings.lnk"),
+    (Join-Path $programFolder "Settings Codex Pet Limit Rings.lnk")
+  )
+  foreach ($shortcutPath in $programShortcuts) {
+    if (Test-ShortcutTargetsInstallDir -ShortcutPath $shortcutPath -InstallRoot $targetRoot) {
+      Remove-Item -LiteralPath $shortcutPath -Force
+      Write-Output "Removed Start Menu shortcut: $shortcutPath"
+    }
+  }
+  if ((Test-Path -LiteralPath $programFolder) -and -not (Get-ChildItem -LiteralPath $programFolder -Force)) {
+    Remove-Item -LiteralPath $programFolder -Force
+  }
 }
 
 if ($RemoveFiles) {
@@ -88,4 +101,4 @@ if ($RemoveFiles) {
   }
 }
 
-Write-Output "Uninstalled Codex Pet Limit Rings for Windows."
+Write-Output "Uninstalled Codexy pet usages ring."

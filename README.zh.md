@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/himomohi/Codexy-pet-usages-ring/releases/latest">
-    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.6-3CEBBD?style=for-the-badge&logo=github">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.7-3CEBBD?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md#016"><img alt="Version 0.1.6" src="https://img.shields.io/badge/version-0.1.6-3CEBBD?style=for-the-badge"></a>
+  <a href="CHANGELOG.md#017"><img alt="Version 0.1.7" src="https://img.shields.io/badge/version-0.1.7-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -74,7 +74,7 @@ Python 是可选项，仅用于本地 SQLite log fallback。
 3. 双击 `Install.bat`。
 4. 在 Codex Desktop 中使用 `/pet`。
 
-Installer 会将文件复制到 `%LOCALAPPDATA%\CodexPetLimitRingsWin`，启动 helper，
+Installer 会将文件复制到 `%LOCALAPPDATA%\CodexyPetUsagesRing`，启动 helper，
 并将其注册到 Windows 启动项。
 
 PowerShell 安装:
@@ -97,7 +97,7 @@ Uninstall.bat
 ```
 
 如果已安装，这些 launcher 会自动使用
-`%LOCALAPPDATA%\CodexPetLimitRingsWin` 下的已安装 helper。
+`%LOCALAPPDATA%\CodexyPetUsagesRing` 下的已安装 helper。
 
 PowerShell:
 
@@ -137,7 +137,7 @@ PowerShell:
 设置文件:
 
 ```text
-%LOCALAPPDATA%\CodexPetLimitRingsWin\settings.json
+%LOCALAPPDATA%\CodexyPetUsagesRing\settings.json
 ```
 
 你可以在圆环/电池显示之间切换，并更改颜色、透明度、readout 颜色和 hover text

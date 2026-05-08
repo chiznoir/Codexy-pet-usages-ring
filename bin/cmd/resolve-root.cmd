@@ -4,6 +4,8 @@ if defined CODEX_PET_USE_REPO exit /b 0
 if not defined SCRIPT_NAME exit /b 0
 if not defined LOCALAPPDATA exit /b 0
 
-set "INSTALLED_ROOT=%LOCALAPPDATA%\CodexPetLimitRingsWin"
+set "INSTALLED_ROOT=%LOCALAPPDATA%\CodexyPetUsagesRing"
 if exist "%INSTALLED_ROOT%\bin\powershell\%SCRIPT_NAME%" set "ROOT=%INSTALLED_ROOT%"
+set "LEGACY_ROOT=%LOCALAPPDATA%\CodexPetLimitRingsWin"
+if exist "%LEGACY_ROOT%\bin\powershell\%SCRIPT_NAME%" set "ROOT=%LEGACY_ROOT%"
 exit /b 0

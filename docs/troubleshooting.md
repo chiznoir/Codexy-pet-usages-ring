@@ -1,4 +1,4 @@
-﻿# Troubleshooting
+# Troubleshooting
 
 ## I just want the easiest install
 
@@ -114,7 +114,7 @@ Then check:
 The Startup shortcut should exist at:
 
 ```text
-%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Codex Pet Limit Rings.lnk
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Codexy pet usages ring.lnk
 ```
 
 ## CMD or Bash wrapper fails
@@ -159,7 +159,7 @@ Then run:
 ```
 
 Only remove a directory manually after confirming the path is really the
-Codex Pet Limit Rings install directory.
+Codexy pet usages ring install directory.
 
 ## Settings page says forbidden
 
@@ -184,7 +184,7 @@ be allowed to read or save settings.
 Logs are written to:
 
 ```text
-%LOCALAPPDATA%\CodexPetLimitRingsWin\logs\rings.log
+%LOCALAPPDATA%\CodexyPetUsagesRing\logs\codexy-pet-usages-ring.log
 ```
 
 Right-click the tray icon and choose `Open Logs`.

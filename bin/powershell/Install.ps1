@@ -1,5 +1,5 @@
 param(
-  [string]$InstallDir = "$env:LOCALAPPDATA\CodexPetLimitRingsWin",
+  [string]$InstallDir = "$env:LOCALAPPDATA\CodexyPetUsagesRing",
   [string]$CodexHome = "$env:USERPROFILE\.codex",
   [switch]$NoStartup,
   [switch]$NoStartMenu,
@@ -73,7 +73,11 @@ function Test-ProjectPathExcluded {
 function Remove-ObsoleteEntryPoints {
   foreach ($name in @(
     "scripts",
+    ".codex-pet-limit-rings.pid",
+    ".codex-pet-limit-rings-win.install.json",
     ".gitignore",
+    "src\CodexPetLimitRings.ps1",
+    "src\codex-pet-limit-rings-windows.ps1",
     "docs\assets\current-pet-usage-capture.png",
     "docs\assets\imagegen-hero-background.png",
     "dist",
@@ -117,7 +121,7 @@ if (-not (Test-Path -LiteralPath $runtimeStateScript)) {
 
 $sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
-  $InstallDir = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "CodexPetLimitRingsWin"
+  $InstallDir = Get-CodexPetDefaultInstallDir
 }
 $targetRoot = [System.IO.Path]::GetFullPath($InstallDir)
 $versionFile = Join-Path $sourceRoot "VERSION"
@@ -166,48 +170,60 @@ if (Test-Path -LiteralPath $codexDiscoveryScript) {
 
 if (-not $NoStartup) {
   $startup = [Environment]::GetFolderPath("Startup")
-  $shortcutPath = Join-Path $startup "Codex Pet Limit Rings.lnk"
+  $legacyStartupShortcut = Join-Path $startup "Codex Pet Limit Rings.lnk"
+  if (Test-Path -LiteralPath $legacyStartupShortcut) {
+    Remove-Item -LiteralPath $legacyStartupShortcut -Force
+  }
+  $shortcutPath = Join-Path $startup "Codexy pet usages ring.lnk"
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($shortcutPath)
   $shortcut.TargetPath = $powerShell
   $shortcut.Arguments = Get-StartScriptShortcutArguments -StartScript $startScript
   $shortcut.WorkingDirectory = $targetRoot
   $shortcut.WindowStyle = 7
-  $shortcut.Description = "Start Codex Pet Limit Rings for Windows"
+  $shortcut.Description = "Start Codexy pet usages ring"
   $shortcut.Save()
   Write-Output "Startup shortcut: $shortcutPath"
 }
 
 if (-not $NoStartMenu) {
   $programs = [Environment]::GetFolderPath("Programs")
-  $programFolder = Join-Path $programs "Codex Pet Limit Rings"
+  $legacyProgramFolder = Join-Path $programs "Codex Pet Limit Rings"
+  if (Test-Path -LiteralPath $legacyProgramFolder) {
+    Remove-Item -LiteralPath $legacyProgramFolder -Recurse -Force
+  }
+  $programFolder = Join-Path $programs "Codexy pet usages ring"
   New-Item -ItemType Directory -Force -Path $programFolder | Out-Null
-  $programShortcut = Join-Path $programFolder "Start Codex Pet Limit Rings.lnk"
+  $programShortcut = Join-Path $programFolder "Start Codexy pet usages ring.lnk"
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($programShortcut)
   $shortcut.TargetPath = $powerShell
   $shortcut.Arguments = Get-StartScriptShortcutArguments -StartScript $startScript
   $shortcut.WorkingDirectory = $targetRoot
   $shortcut.WindowStyle = 7
-  $shortcut.Description = "Start Codex Pet Limit Rings for Windows"
+  $shortcut.Description = "Start Codexy pet usages ring"
   $shortcut.Save()
   Write-Output "Start Menu shortcut: $programShortcut"
 
   $settingsScript = Join-Path $targetRoot "bin\powershell\Settings.ps1"
   if (Test-Path -LiteralPath $settingsScript) {
-    $settingsShortcut = Join-Path $programFolder "Settings Codex Pet Limit Rings.lnk"
+    $settingsShortcut = Join-Path $programFolder "Settings Codexy pet usages ring.lnk"
     $shortcut = $shell.CreateShortcut($settingsShortcut)
     $shortcut.TargetPath = $powerShell
     $shortcut.Arguments = "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$settingsScript`""
     $shortcut.WorkingDirectory = $targetRoot
     $shortcut.WindowStyle = 7
-    $shortcut.Description = "Open Codex Pet Limit Rings settings"
+    $shortcut.Description = "Open Codexy pet usages ring settings"
     $shortcut.Save()
     Write-Output "Settings shortcut: $settingsShortcut"
   }
 }
 
 if (-not $NoStart) {
+  $stopScript = Join-Path $targetRoot "bin\powershell\Stop.ps1"
+  if (Test-Path -LiteralPath $stopScript) {
+    & $stopScript -Quiet
+  }
   $startParams = @{
     CodexHome = $CodexHome
     CodexStartWaitSeconds = $CodexStartWaitSeconds
@@ -219,5 +235,5 @@ if (-not $NoStart) {
   & $startScript @startParams
 }
 
-Write-Output "Installed Codex Pet Limit Rings for Windows."
+Write-Output "Installed Codexy pet usages ring."
 Write-Output "Install directory: $targetRoot"

@@ -21,7 +21,7 @@ if (Test-Path -LiteralPath $codexDiscoveryScript) {
   . $codexDiscoveryScript
 }
 
-Write-Output "Codex Pet Limit Rings for Windows diagnostics"
+Write-Output "Codexy pet usages ring diagnostics"
 Write-Output "PowerShell: $($PSVersionTable.PSVersion)"
 Write-Output "OS: $([Environment]::OSVersion.VersionString)"
 Write-Output "CodexHome: $CodexHome"

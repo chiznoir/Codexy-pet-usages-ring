@@ -1,12 +1,12 @@
 param(
-  [string]$InstallDir = "$env:LOCALAPPDATA\CodexPetLimitRingsWin",
+  [string]$InstallDir = "$env:LOCALAPPDATA\CodexyPetUsagesRing",
   [string]$CodexHome = "$env:USERPROFILE\.codex"
 )
 
 $ErrorActionPreference = "Stop"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-  throw "Codex Pet Limit Rings for Windows can only run on Windows."
+  throw "Codexy pet usages ring can only run on Windows."
 }
 
 function Read-Utf8Text {
@@ -46,7 +46,7 @@ if (Test-Path -LiteralPath $statePath) {
   try { $state = Read-Utf8Text -Path $statePath | ConvertFrom-Json } catch { $state = $null }
 }
 
-$startupShortcut = Join-Path ([Environment]::GetFolderPath("Startup")) "Codex Pet Limit Rings.lnk"
+$startupShortcut = Join-Path ([Environment]::GetFolderPath("Startup")) "Codexy pet usages ring.lnk"
 
 [PSCustomObject]@{
   Installed = Test-Path -LiteralPath $InstallDir

@@ -22,7 +22,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-  throw "Codex Pet Limit Rings for Windows can only run on Windows."
+  throw "Codexy pet usages ring can only run on Windows."
 }
 
 $UsagePollSeconds = [Math]::Max(5, $UsagePollSeconds)
@@ -36,10 +36,10 @@ $OuterStroke = [Math]::Max(1.0, $OuterStroke)
 $InnerStroke = [Math]::Max(1.0, $InnerStroke)
 
 if ([string]::IsNullOrWhiteSpace($LogDirectory)) {
-  $LogDirectory = Join-Path $env:LOCALAPPDATA "CodexPetLimitRingsWin\logs"
+  $LogDirectory = Join-Path $env:LOCALAPPDATA "CodexyPetUsagesRing\logs"
 }
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
-$script:LogFile = Join-Path $LogDirectory "rings.log"
+$script:LogFile = Join-Path $LogDirectory "codexy-pet-usages-ring.log"
 
 function Write-AppLog {
   param([string]$Message)
@@ -59,7 +59,7 @@ function Read-Utf8Text {
   return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
 }
 
-Write-AppLog "Starting Codex Pet Limit Rings for Windows."
+Write-AppLog "Starting Codexy pet usages ring."
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -569,8 +569,8 @@ function Get-UiText {
     }
   }
   switch ($Key) {
-    "TrayTitle" { return "Codex Rings" }
-    "TrayText" { return "Codex Rings: {0} 5h, {1} weekly" }
+    "TrayTitle" { return "Codexy" }
+    "TrayText" { return "Codexy: {0} 5h, {1} weekly" }
     "ShowRings" { return "Show Rings" }
     "RefreshNow" { return "Refresh Now" }
     "Settings" { return "Settings" }
@@ -1802,7 +1802,7 @@ function Update-TrayMenuText {
 }
 
 function Stop-RingsApp {
-  Write-AppLog "Stopping Codex Pet Limit Rings for Windows."
+  Write-AppLog "Stopping Codexy pet usages ring."
   if ($null -ne $script:OuterReadoutWindow -and $script:OuterReadoutWindow.IsVisible) {
     $script:OuterReadoutWindow.Hide()
   }

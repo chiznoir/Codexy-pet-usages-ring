@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-pet-limit-rings-smoke-" + [Guid]::NewGuid().ToString("N"))
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codexy-pet-usages-ring-smoke-" + [Guid]::NewGuid().ToString("N"))
 $releaseOut = Join-Path $tempRoot "release"
 $installRoot = Join-Path $tempRoot "install"
 $fixtures = @()
@@ -97,7 +97,7 @@ try {
   & (Join-Path $root "tools\New-ReleaseZip.ps1") -OutputDirectory $releaseOut | Out-Host
   $zip = Get-ChildItem -LiteralPath $releaseOut -Filter "*.zip" | Select-Object -First 1
   if (-not $zip) { throw "Release zip was not created." }
-  if ($zip.Name -ne "codex-pet-limit-rings-Win-$version.zip") {
+  if ($zip.Name -ne "Codexy-pet-usages-ring-$version.zip") {
     throw "Release zip name must match VERSION $version. Found: $($zip.Name)"
   }
 

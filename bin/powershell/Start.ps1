@@ -18,7 +18,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
-  throw "Codex Pet Limit Rings for Windows can only run on Windows."
+  throw "Codexy pet usages ring can only run on Windows."
 }
 
 $runtimeStateScript = Join-Path $PSScriptRoot "RuntimeState.ps1"
@@ -50,7 +50,7 @@ function Quote-Argument {
 }
 
 $projectRoot = Get-ProjectRoot
-$appScript = Join-Path $projectRoot "src\CodexPetLimitRings.ps1"
+$appScript = Join-Path $projectRoot "src\CodexyPetUsagesRing.ps1"
 if (-not (Test-Path -LiteralPath $appScript)) {
   throw "Missing app script: $appScript"
 }
@@ -92,7 +92,7 @@ $powerShell = Get-WindowsPowerShell
 $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
 if ([string]::IsNullOrWhiteSpace($localAppData)) { $localAppData = $env:LOCALAPPDATA }
 if ([string]::IsNullOrWhiteSpace($localAppData)) { $localAppData = $env:TEMP }
-$logDir = Join-Path $localAppData "CodexPetLimitRingsWin\logs"
+$logDir = Join-Path $localAppData "CodexyPetUsagesRing\logs"
 if ([string]::IsNullOrWhiteSpace($SettingsPath)) {
   $SettingsPath = Join-Path $projectRoot "settings.json"
 }
@@ -118,6 +118,6 @@ $process = Start-Process -FilePath $powerShell -ArgumentList $argumentLine -Work
 if (Get-Command Set-CodexPetPidFile -ErrorAction SilentlyContinue) {
   Set-CodexPetPidFile -ProjectRoot $projectRoot -ProcessId $process.Id
 }
-Write-Output "Started Codex Pet Limit Rings for Windows."
+Write-Output "Started Codexy pet usages ring."
 Write-Output "PID: $($process.Id)"
 Write-Output "Project: $projectRoot"

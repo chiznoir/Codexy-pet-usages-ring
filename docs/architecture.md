@@ -1,6 +1,6 @@
-﻿# Architecture
+# Architecture
 
-Codex Pet Limit Rings for Windows is a companion overlay. It runs next to Codex
+Codexy pet usages ring is a companion overlay. It runs next to Codex
 Desktop instead of modifying Codex itself.
 
 ## Data Flow

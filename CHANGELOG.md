@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7
+
+### Changed
+
+- Renamed release zip, install directory, runtime marker, PID file, log file, shortcuts, and settings title to match Codexy pet usages ring.
+- Renamed the overlay entry script to `CodexyPetUsagesRing.ps1` while keeping legacy process detection for existing installs.
+
 ## 0.1.6
 
 ### Fixed
