@@ -67,6 +67,13 @@ function Assert-VersionMetadata {
   return $version
 }
 
+function Assert-SettingsLauncherUsesActiveInstall {
+  $settingsLauncher = Get-Content -Raw -LiteralPath (Join-Path $root "Settings.bat")
+  if ($settingsLauncher -match 'CODEX_PET_USE_REPO') {
+    throw "Settings.bat must not force repo settings. It should let bin\\cmd\\settings.cmd resolve the active install so saved settings apply to the running helper."
+  }
+}
+
 try {
   New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
@@ -79,6 +86,7 @@ try {
   Add-Fixture -RelativePath "smoke.tmp"
 
   $version = Assert-VersionMetadata
+  Assert-SettingsLauncherUsesActiveInstall
 
   $parseErrorsText = @()
   Get-ChildItem -LiteralPath $root -Recurse -Filter "*.ps1" | Where-Object { $_.FullName -notmatch '\\.git\\' } | ForEach-Object {

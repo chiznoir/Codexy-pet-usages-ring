@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8
+
+### Fixed
+
+- Made the root `Settings.bat` open the active installed settings file so saved changes apply to the running helper immediately.
+- Added a smoke regression check to prevent the settings launcher from forcing repo-local settings again.
+
 ## 0.1.7
 
 ### Changed
