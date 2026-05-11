@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.10
+
+### Changed
+
+- Changed pet growth so today's XP fills directly from 5h usage progress instead of waiting on weekly usage thresholds.
+- Clarified growth-mode copy in the pixel-art settings page: Light, Balanced, and Focused modes now explain their 5h usage targets and +30 XP daily cap.
+- Updated growth hover readouts to show today's 5h progress, target, and earned XP.
+
+### Fixed
+
+- Hid ring, battery, badge, growth chip, and hover readouts immediately when the real `/pet` overlay closes.
+- Kept weekly usage as a reset/depletion guard instead of letting it block normal 5h-based XP gains.
+
 ## 0.1.9
 
 ### Added

@@ -1048,6 +1048,7 @@
             <ul class="growth-rules">
               <li data-i18n="growthRuleVisible">XP는 실제 /pet 창이 보이고 사용량 스냅샷이 있을 때만 계산됩니다.</li>
               <li data-i18n="growthRuleMinute">5h 사용량 진행률이 오늘 XP가 되며 하루 최대 +30 XP까지 차오릅니다.</li>
+              <li data-i18n="growthRuleWeekly">주간 사용량은 XP를 올리는 기준이 아니라 리셋 시즌과 고갈 방지 판단에 사용됩니다.</li>
               <li data-i18n="growthRuleLow">5h 또는 주간 잔량이 20% 미만이면 과열, 10% 미만이면 쿨다운이 되어 고갈 방지로 XP가 멈춥니다.</li>
               <li data-i18n="growthRuleReset">5h 리셋은 성장 조건을 유지했을 때 1회 +10 XP를 줍니다. 주간 리셋이 오면 펫은 Lv1부터 다시 시작합니다.</li>
             </ul>
@@ -1365,6 +1366,7 @@
         growthModeHelpActive: 'Focused Use: convert progress toward 60% 5h usage into up to +30 XP today.',
         growthRuleVisible: 'XP is calculated only when the real /pet window is visible and a usage snapshot exists.',
         growthRuleMinute: '5h usage progress becomes today XP, filling up to +30 XP per day.',
+        growthRuleWeekly: 'Weekly usage no longer raises XP directly; it is used for reset seasons and depletion guard checks.',
         growthRuleLow: 'If 5h or weekly remaining quota drops below 20%, the pet becomes Overheated; below 10%, Cooldown. XP pauses to avoid depletion.',
         growthRuleReset: 'A 5h reset grants +10 XP once if the growth target stayed charged. A weekly reset restarts the pet at Lv1.',
         growthChip: 'Show Growth Chip',
@@ -1450,6 +1452,7 @@
         growthModeHelpActive: '집중 사용형: 5h 사용량 60%를 오늘 목표로 삼고, 목표까지의 진행률을 최대 +30 XP로 환산합니다.',
         growthRuleVisible: 'XP는 실제 /pet 창이 보이고 사용량 스냅샷이 있을 때만 계산됩니다.',
         growthRuleMinute: '5h 사용량 진행률이 오늘 XP가 되며 하루 최대 +30 XP까지 차오릅니다.',
+        growthRuleWeekly: '주간 사용량은 XP를 올리는 기준이 아니라 리셋 시즌과 고갈 방지 판단에 사용됩니다.',
         growthRuleLow: '5h 또는 주간 잔량이 20% 미만이면 과열, 10% 미만이면 쿨다운이 되어 고갈 방지로 XP가 멈춥니다.',
         growthRuleReset: '5h 리셋은 성장 조건을 유지했을 때 1회 +10 XP를 줍니다. 주간 리셋이 오면 펫은 Lv1부터 다시 시작합니다.',
         growthChip: '성장 칩 표시',
@@ -1535,6 +1538,7 @@
         growthModeHelpActive: '集中使用型: 5h 使用量 60% への進行度を、今日最大 +30 XP に換算します。',
         growthRuleVisible: 'XP は実際の /pet ウィンドウが見えていて、使用量スナップショットがある時だけ計算されます。',
         growthRuleMinute: '5h 使用量の進行度が今日の XP になり、1日最大 +30 XP まで増えます。',
+        growthRuleWeekly: '週次使用量は XP を直接増やす条件ではなく、リセットシーズンと使い切り防止の判断に使われます。',
         growthRuleLow: '5h または週次の残量が 20% 未満なら オーバーヒート、10% 未満なら クールダウン になり、使い切り防止のため XP は止まります。',
         growthRuleReset: '5h リセットは成長条件を保った場合に 1回 +10 XP。週次リセットではペットが Lv1 から再開します。',
         growthChip: '成長チップを表示',
@@ -1620,6 +1624,7 @@
         growthModeHelpActive: '专注使用型：将 5h 使用量到 60% 目标的进度换算为今日最多 +30 XP。',
         growthRuleVisible: '只有真实 /pet 窗口可见并且存在使用量快照时，才会计算 XP。',
         growthRuleMinute: '5h 使用量进度会变成今日 XP，每天最多填充到 +30 XP。',
+        growthRuleWeekly: '每周使用量不再直接提升 XP；它用于重置赛季和防耗尽判断。',
         growthRuleLow: '5h 或每周剩余额度低于 20% 会变为过热，低于 10% 会变为冷却中，XP 会暂停以避免耗尽。',
         growthRuleReset: '5h 重置时，如果使用目标保持健康，可获得一次 +10 XP。每周重置时，宠物会从 Lv1 重新开始。',
         growthChip: '显示成长标签',
