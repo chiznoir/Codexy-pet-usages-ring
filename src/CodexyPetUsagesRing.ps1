@@ -16,6 +16,7 @@ param(
   [byte]$TrackOpacity = 22,
   [string]$SettingsPath = "",
   [string]$LogDirectory = "",
+  [switch]$NoExitWithCodex,
   [switch]$NoTrayIcon
 )
 
@@ -151,6 +152,32 @@ public static class CodexPetLimitRingNative {
         } catch {
             return false;
         }
+    }
+
+    public static bool IsCodexDesktopRunning() {
+        try {
+            foreach (Process process in Process.GetProcessesByName("Codex")) {
+                try {
+                    string path = process.MainModule.FileName;
+                    if (string.IsNullOrWhiteSpace(path)) {
+                        continue;
+                    }
+                    if (path.EndsWith(@"resources\codex.exe", StringComparison.OrdinalIgnoreCase)) {
+                        continue;
+                    }
+                    return true;
+                } catch {
+                    try {
+                        if (!string.IsNullOrWhiteSpace(process.MainWindowTitle)) {
+                            return true;
+                        }
+                    } catch {
+                    }
+                }
+            }
+        } catch {
+        }
+        return false;
     }
 
     public static IntPtr FindOverlappingCodexWindow(
@@ -2306,6 +2333,28 @@ function Stop-RingsApp {
   [System.Windows.Application]::Current.Shutdown()
 }
 
+function Test-CodexDesktopAlive {
+  if ($NoExitWithCodex) { return $true }
+  try {
+    $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'Codex.exe'" -ErrorAction Stop)
+    return [bool]($processes | Where-Object {
+      -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+      (Split-Path -Leaf $_.ExecutablePath) -ieq "Codex.exe" -and
+      $_.ExecutablePath -notmatch '\\resources\\codex\.exe$' -and
+      $_.CommandLine -notmatch '\s--type='
+    } | Select-Object -First 1)
+  } catch {
+    return [CodexPetLimitRingNative]::IsCodexDesktopRunning()
+  }
+}
+
+function Stop-WhenCodexDesktopClosed {
+  if ($NoExitWithCodex) { return }
+  if (Test-CodexDesktopAlive) { return }
+  Write-AppLog "Codex Desktop is not running; stopping companion helper."
+  Stop-RingsApp
+}
+
 [void](Update-StyleFromSettings -Force)
 
 $script:App = [System.Windows.Application]::new()
@@ -2613,6 +2662,17 @@ $script:PetTimer.Add_Tick({
 })
 $script:PetTimer.Start()
 
+$script:LifecycleTimer = [System.Windows.Threading.DispatcherTimer]::new()
+$script:LifecycleTimer.Interval = [TimeSpan]::FromSeconds(5)
+$script:LifecycleTimer.Add_Tick({
+  try {
+    Stop-WhenCodexDesktopClosed
+  } catch {
+    Write-AppLog "Lifecycle check failed: $($_.Exception.Message)"
+  }
+})
+$script:LifecycleTimer.Start()
+
 $script:UsageTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $script:UsageTimer.Interval = [TimeSpan]::FromSeconds($UsagePollSeconds)
 $script:UsageTimer.Add_Tick({
@@ -2655,6 +2715,11 @@ Update-PetFrame
 
 $script:App.Add_Exit({
   Save-PetGrowthState -Force
+  foreach ($timer in @($script:FrameTimer, $script:PetTimer, $script:LifecycleTimer, $script:UsageTimer, $script:SettingsTimer, $script:MaintenanceTimer)) {
+    if ($null -ne $timer) {
+      try { $timer.Stop() } catch {}
+    }
+  }
   if ($null -ne $script:NotifyIcon) {
     $script:NotifyIcon.Visible = $false
     $script:NotifyIcon.Dispose()

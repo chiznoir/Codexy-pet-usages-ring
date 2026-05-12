@@ -46,6 +46,22 @@ function Assert-NoForbiddenPaths {
   }
 }
 
+function Assert-InstalledFileMatches {
+  param([string]$InstallRoot, [string]$RelativePath)
+  $normalized = $RelativePath -replace '/', '\'
+  $source = Join-Path $root $normalized
+  $installed = Join-Path $InstallRoot $normalized
+  if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) {
+    throw "Temp install is missing required file: $RelativePath"
+  }
+
+  $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash
+  $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash
+  if ($sourceHash -ne $installedHash) {
+    throw "Temp install file does not match source: $RelativePath"
+  }
+}
+
 function Assert-VersionMetadata {
   $version = (Get-Content -Raw -LiteralPath (Join-Path $root "VERSION")).Trim()
   if ($version -notmatch '^\d+\.\d+\.\d+$') {
@@ -355,6 +371,49 @@ function Assert-PetHudHideCleanup {
   }
 }
 
+function Assert-CompanionLifecycle {
+  $runtime = Get-Content -Raw -LiteralPath (Join-Path $root "src\CodexyPetUsagesRing.ps1")
+  foreach ($required in @(
+    '[switch]$NoExitWithCodex',
+    'public static bool IsCodexDesktopRunning()',
+    'function Stop-WhenCodexDesktopClosed',
+    '$script:LifecycleTimer = [System.Windows.Threading.DispatcherTimer]::new()',
+    'Stop-WhenCodexDesktopClosed',
+    'Codex Desktop is not running; stopping companion helper.'
+  )) {
+    if (-not $runtime.Contains($required)) {
+      throw "Companion lifecycle cleanup is missing required code: $required"
+    }
+  }
+
+  $startScript = Get-Content -Raw -LiteralPath (Join-Path $root "bin\powershell\Start.ps1")
+  foreach ($required in @(
+    '[switch]$ShowTrayIcon',
+    '[switch]$NoExitWithCodex',
+    'if ($NoExitWithCodex) { $args += "-NoExitWithCodex" }',
+    'src\WatchPetOverlay.ps1',
+    'Started Codexy pet usages ring watcher.'
+  )) {
+    if (-not $startScript.Contains($required)) {
+      throw "Start.ps1 lifecycle/tray defaults are missing required code: $required"
+    }
+  }
+
+  $watcherScript = Get-Content -Raw -LiteralPath (Join-Path $root "src\WatchPetOverlay.ps1")
+  foreach ($required in @(
+    'function Test-PetOverlayOpen',
+    'function Start-Companion',
+    'function Stop-Companion',
+    'if (-not $ShowTrayIcon) { $args += "-NoTrayIcon" }',
+    'Stop-Companion',
+    'Start-Companion'
+  )) {
+    if (-not $watcherScript.Contains($required)) {
+      throw "WatchPetOverlay.ps1 trigger lifecycle is missing required code: $required"
+    }
+  }
+}
+
 try {
   New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
@@ -372,6 +431,7 @@ try {
   Assert-SettingsDisplayModes
   Assert-PetGrowthCalculations
   Assert-PetHudHideCleanup
+  Assert-CompanionLifecycle
 
   $parseErrorsText = @()
   Get-ChildItem -LiteralPath $root -Recurse -Filter "*.ps1" | Where-Object { $_.FullName -notmatch '\\.git\\' } | ForEach-Object {
@@ -408,6 +468,9 @@ try {
     $_.FullName.Substring($installRoot.TrimEnd("\").Length + 1) -replace '\\', '/'
   })
   Assert-NoForbiddenPaths -Paths $installedFiles -Scope "Temp install"
+  foreach ($requiredInstallFile in @("settings/index.html", "README.ja.md", "README.zh.md")) {
+    Assert-InstalledFileMatches -InstallRoot $installRoot -RelativePath $requiredInstallFile
+  }
   & (Join-Path $root "bin\powershell\Uninstall.ps1") -InstallDir $installRoot -RemoveFiles | Out-Host
 
   Write-Output "Smoke checks passed."

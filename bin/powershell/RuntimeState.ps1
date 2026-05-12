@@ -26,6 +26,7 @@ function Get-CodexPetRuntimePaths {
   return [PSCustomObject]@{
     ProjectRoot = $root
     AppScript = Join-Path $src "CodexyPetUsagesRing.ps1"
+    WatchScript = Join-Path $src "WatchPetOverlay.ps1"
     LegacyScript = Join-Path $src "CodexPetLimitRings.ps1"
     LegacyScript2 = Join-Path $src "codex-pet-limit-rings-windows.ps1"
     PidFile = Join-Path $root $script:CodexPetPidFileName
@@ -82,6 +83,7 @@ function Test-CodexPetRuntimeCommandLine {
   )
   return (
     (Test-CodexPetPathInCommandLine -CommandLine $CommandLine -Path $RuntimePaths.AppScript) -or
+    (Test-CodexPetPathInCommandLine -CommandLine $CommandLine -Path $RuntimePaths.WatchScript) -or
     (Test-CodexPetPathInCommandLine -CommandLine $CommandLine -Path $RuntimePaths.LegacyScript) -or
     (Test-CodexPetPathInCommandLine -CommandLine $CommandLine -Path $RuntimePaths.LegacyScript2)
   )

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.11
+
+### Added
+
+- Added a lightweight `/pet` watcher that starts the companion helper only when the real Codex `/pet` overlay is visible.
+- Added lifecycle cleanup so the helper stops when `/pet` closes or Codex Desktop exits.
+
+### Changed
+
+- Made the Windows tray icon opt-in with `-ShowTrayIcon` so the companion no longer looks like a second Codex app by default.
+- Changed startup shortcuts to launch the watcher first, keeping the heavier WPF overlay dormant until `/pet` appears.
+
+### Fixed
+
+- Verified installed `settings/index.html` against the source file during install so settings-page edits cannot silently ship stale.
+- Kept install contents aligned with the release zip by including every localized README variant.
+
 ## 0.1.10
 
 ### Changed

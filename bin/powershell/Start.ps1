@@ -9,6 +9,8 @@ param(
   [double]$ReadoutPadding = 160.0,
   [string]$SettingsPath = "",
   [switch]$NoTrayIcon,
+  [switch]$ShowTrayIcon,
+  [switch]$NoExitWithCodex,
   [string]$CodexAppPath = "",
   [string]$CodexAppId = "",
   [switch]$NoStartCodex,
@@ -50,9 +52,9 @@ function Quote-Argument {
 }
 
 $projectRoot = Get-ProjectRoot
-$appScript = Join-Path $projectRoot "src\CodexyPetUsagesRing.ps1"
-if (-not (Test-Path -LiteralPath $appScript)) {
-  throw "Missing app script: $appScript"
+$watchScript = Join-Path $projectRoot "src\WatchPetOverlay.ps1"
+if (-not (Test-Path -LiteralPath $watchScript)) {
+  throw "Missing watcher script: $watchScript"
 }
 
 $codexDiscoveryScript = Join-Path $projectRoot "src\CodexAppDiscovery.ps1"
@@ -100,24 +102,23 @@ $args = @(
   "-NoProfile",
   "-ExecutionPolicy", "Bypass",
   "-STA",
-  "-File", $appScript,
+  "-File", $watchScript,
   "-CodexHome", $CodexHome,
-  "-UsagePollSeconds", $UsagePollSeconds,
-  "-FramePollMs", $FramePollMs,
-  "-IdleFramePollMs", $IdleFramePollMs,
-  "-PetPollMs", $PetPollMs,
-  "-ReadoutPadding", $ReadoutPadding,
-  "-SettingsPath", $SettingsPath,
-  "-LogDirectory", $logDir
+  "-InstallDir", $projectRoot
 )
 if ($NoLiveUsage) { $args += "-NoLiveUsage" }
-if ($NoTrayIcon) { $args += "-NoTrayIcon" }
+if ($NoExitWithCodex) { $args += "-NoExitWithCodex" }
+if ($ShowTrayIcon -and -not $NoTrayIcon) { $args += "-ShowTrayIcon" }
+if ($NoStartCodex) { $args += "-NoStartCodex" }
+if (-not [string]::IsNullOrWhiteSpace($CodexAppPath)) { $args += @("-CodexAppPath", $CodexAppPath) }
+if (-not [string]::IsNullOrWhiteSpace($CodexAppId)) { $args += @("-CodexAppId", $CodexAppId) }
+if ($CodexStartWaitSeconds -ne 8) { $args += @("-CodexStartWaitSeconds", $CodexStartWaitSeconds) }
 
 $argumentLine = ($args | ForEach-Object { Quote-Argument ([string]$_) }) -join " "
 $process = Start-Process -FilePath $powerShell -ArgumentList $argumentLine -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru
 if (Get-Command Set-CodexPetPidFile -ErrorAction SilentlyContinue) {
   Set-CodexPetPidFile -ProjectRoot $projectRoot -ProcessId $process.Id
 }
-Write-Output "Started Codexy pet usages ring."
+Write-Output "Started Codexy pet usages ring watcher."
 Write-Output "PID: $($process.Id)"
 Write-Output "Project: $projectRoot"

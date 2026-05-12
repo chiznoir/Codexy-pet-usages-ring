@@ -5,6 +5,8 @@ param(
   [switch]$NoStartMenu,
   [switch]$NoStart,
   [switch]$NoLiveUsage,
+  [switch]$ShowTrayIcon,
+  [switch]$NoExitWithCodex,
   [string]$CodexAppPath = "",
   [string]$CodexAppId = "",
   [switch]$NoStartCodex,
@@ -93,10 +95,30 @@ function Remove-ObsoleteEntryPoints {
   }
 }
 
+function Assert-InstalledProjectFileMatches {
+  param([string]$Name)
+  $source = Join-Path $sourceRoot $Name
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { return }
+  if (Test-ProjectPathExcluded -Path $source) { return }
+
+  $destination = Join-Path $targetRoot $Name
+  if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+    throw "Install verification failed: missing installed file '$Name'."
+  }
+
+  $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash
+  $destinationHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $destination).Hash
+  if ($sourceHash -ne $destinationHash) {
+    throw "Install verification failed: installed '$Name' does not match the source file."
+  }
+}
+
 function Get-StartScriptShortcutArguments {
   param([string]$StartScript)
   $arguments = "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -STA -File `"$StartScript`" -CodexHome `"$CodexHome`""
   if ($NoLiveUsage) { $arguments += " -NoLiveUsage" }
+  if ($ShowTrayIcon) { $arguments += " -ShowTrayIcon" }
+  if ($NoExitWithCodex) { $arguments += " -NoExitWithCodex" }
   if ($NoStartCodex) { $arguments += " -NoStartCodex" }
   if (-not [string]::IsNullOrWhiteSpace($CodexAppPath)) {
     $arguments += " -CodexAppPath `"$CodexAppPath`""
@@ -134,7 +156,7 @@ if ((Test-Path -LiteralPath $targetRoot) -and -not $Force) {
 
 if ($sourceRoot -ne $targetRoot) {
   New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
-  foreach ($name in @("Install.bat", "Start.bat", "Stop.bat", "Status.bat", "Settings.bat", "Uninstall.bat", "bin", "src", "docs", "tools", "settings", "settings.defaults.json", "README.md", "README.ko.md", "LICENSE", "NOTICE.md", "CHANGELOG.md", "SECURITY.md", "VERSION")) {
+  foreach ($name in @("Install.bat", "Start.bat", "Stop.bat", "Status.bat", "Settings.bat", "Uninstall.bat", "bin", "src", "docs", "tools", "settings", "settings.defaults.json", "README.md", "README.ko.md", "README.ja.md", "README.zh.md", "LICENSE", "NOTICE.md", "CHANGELOG.md", "SECURITY.md", "VERSION")) {
     Copy-ProjectFile -Name $name
   }
 } else {
@@ -142,6 +164,7 @@ if ($sourceRoot -ne $targetRoot) {
 }
 if ($sourceRoot -ne $targetRoot) {
   Remove-ObsoleteEntryPoints
+  Assert-InstalledProjectFileMatches -Name "settings\index.html"
 }
 Write-CodexPetInstallMarker -ProjectRoot $targetRoot -SourceRoot $sourceRoot -Version $version
 
@@ -230,6 +253,8 @@ if (-not $NoStart) {
     CodexStartWaitSeconds = $CodexStartWaitSeconds
   }
   if ($NoLiveUsage) { $startParams.NoLiveUsage = $true }
+  if ($ShowTrayIcon) { $startParams.ShowTrayIcon = $true }
+  if ($NoExitWithCodex) { $startParams.NoExitWithCodex = $true }
   if ($NoStartCodex) { $startParams.NoStartCodex = $true }
   if (-not [string]::IsNullOrWhiteSpace($CodexAppPath)) { $startParams.CodexAppPath = $CodexAppPath }
   if (-not [string]::IsNullOrWhiteSpace($CodexAppId)) { $startParams.CodexAppId = $CodexAppId }

@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/himomohi/Codexy-pet-usages-ring/releases/latest">
-    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.10-3CEBBD?style=for-the-badge&logo=github">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.11-3CEBBD?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md#0110"><img alt="Version 0.1.10" src="https://img.shields.io/badge/version-0.1.10-3CEBBD?style=for-the-badge"></a>
+  <a href="CHANGELOG.md#0111"><img alt="Version 0.1.11" src="https://img.shields.io/badge/version-0.1.11-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -53,7 +53,8 @@ using PowerShell, WPF, and Win32 window positioning.
 - Displays 5h and weekly usage readouts on hover.
 - Localizes readouts, tray text, and settings UI for English, Korean, Japanese, and Chinese.
 - Auto-detects and can start Codex Desktop.
-- Waits quietly until `/pet` is visible.
+- Starts the companion helper only while `/pet` is visible, then stops it when `/pet` closes.
+- Keeps the Windows tray icon off by default so it does not look like a second Codex app.
 - Uses a click-through WPF overlay, so it does not intercept mouse input.
 - Installs Windows Startup and Start Menu shortcuts.
 - Provides root `.bat` launchers for double-click install, settings, status, start, stop, and uninstall.
@@ -79,7 +80,7 @@ Python is optional and only used for the local SQLite log fallback.
 4. Open Codex Desktop and use `/pet`.
 
 The installer copies files to `%LOCALAPPDATA%\CodexyPetUsagesRing`, starts the
-helper, and registers it for Windows startup.
+lightweight `/pet` watcher, and registers it for Windows startup.
 
 PowerShell install:
 
