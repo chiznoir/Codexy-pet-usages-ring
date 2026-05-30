@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+. (Join-Path $PSScriptRoot "ReleaseManifest.ps1")
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("codexy-pet-usages-ring-smoke-" + [Guid]::NewGuid().ToString("N"))
 $releaseOut = Join-Path $tempRoot "release"
 $installRoot = Join-Path $tempRoot "install"
@@ -22,20 +23,7 @@ function Add-Fixture {
 function Test-ForbiddenPath {
   param([string]$Path)
   $normalized = $Path -replace '\\', '/'
-  $leaf = Split-Path -Leaf $normalized
-  if ($normalized -in @(
-    ".gitignore",
-    "gamification.json",
-    "settings.json",
-    "docs/assets/current-pet-usage-capture.png",
-    "docs/assets/imagegen-hero-background.png"
-  )) { return $true }
-  if ($normalized -like "dist/*" -or $normalized -eq "dist") { return $true }
-  if ($normalized -like "logs/*" -or $normalized -eq "logs") { return $true }
-  if ($normalized -like "qa/*" -or $normalized -eq "qa") { return $true }
-  if ($normalized -like "*.log" -or $normalized -like "*.tmp" -or $normalized -like "*.bak" -or $normalized -like "*.zip") { return $true }
-  if ($leaf -eq ".DS_Store" -or $leaf -eq "Thumbs.db") { return $true }
-  return $false
+  return (Test-CodexPetReleasePathExcluded -RelativePath $normalized)
 }
 
 function Assert-NoForbiddenPaths {
@@ -59,6 +47,36 @@ function Assert-InstalledFileMatches {
   $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash
   if ($sourceHash -ne $installedHash) {
     throw "Temp install file does not match source: $RelativePath"
+  }
+}
+
+function Assert-ZipFileMatches {
+  param($Archive, [string]$RelativePath)
+  $normalized = $RelativePath -replace '\\', '/'
+  $entry = $Archive.Entries | Where-Object { ($_.FullName.TrimEnd("/") -replace '\\', '/') -eq $normalized } | Select-Object -First 1
+  if (-not $entry) {
+    throw "Release zip is missing required file: $RelativePath"
+  }
+
+  $source = Join-Path $root ($normalized -replace '/', '\')
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+    throw "Release manifest required file is missing from source: $RelativePath"
+  }
+
+  $stream = $entry.Open()
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $zipHash = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace("-", "")
+    } finally {
+      $sha.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+  $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $source).Hash
+  if ($sourceHash -ne $zipHash) {
+    throw "Release zip file does not match source: $RelativePath"
   }
 }
 
@@ -116,8 +134,14 @@ function Assert-SettingsDisplayModes {
   if ($defaults.gamification.growthMode -ne "balanced") {
     throw "Default gamification.growthMode should be balanced. Found: $($defaults.gamification.growthMode)"
   }
+  if ($defaults.gamification.hudFocus -ne "growth") {
+    throw "Default gamification.hudFocus should be growth. Found: $($defaults.gamification.hudFocus)"
+  }
   if ($defaults.gamification.showGrowthChip -ne $true -or $defaults.gamification.showHoverReadout -ne $true) {
     throw "Default gamification chip/readout settings should remain true."
+  }
+  if ($defaults.gamification.showKeyCounter -ne $true -or $defaults.gamification.showKeyEffects -ne $true) {
+    throw "Default key counter/effect settings should remain true."
   }
 
   $badgeSettings = Get-NormalizedSettings ([PSCustomObject]@{ displayMode = "badge" })
@@ -132,15 +156,86 @@ function Assert-SettingsDisplayModes {
   if ($invalidSettings.displayMode -ne "ring") {
     throw "Invalid displayMode should fall back to ring. Found: $($invalidSettings.displayMode)"
   }
-  $invalidGrowth = Get-NormalizedSettings ([PSCustomObject]@{ gamification = [PSCustomObject]@{ enabled = "maybe"; growthMode = "chaos"; showGrowthChip = "no"; showHoverReadout = "yes" } })
+  $comboFocus = Get-NormalizedSettings ([PSCustomObject]@{ gamification = [PSCustomObject]@{ hudFocus = "combo" } })
+  if ($comboFocus.gamification.hudFocus -ne "combo") {
+    throw "Settings normalizer should preserve gamification.hudFocus=combo."
+  }
+  $invalidGrowth = Get-NormalizedSettings ([PSCustomObject]@{ gamification = [PSCustomObject]@{ enabled = "maybe"; growthMode = "chaos"; hudFocus = "both"; showGrowthChip = "no"; showHoverReadout = "yes" } })
   if ($invalidGrowth.gamification.enabled -ne $false) {
     throw "Invalid gamification.enabled should fall back to false."
   }
   if ($invalidGrowth.gamification.growthMode -ne "balanced") {
     throw "Invalid gamification.growthMode should fall back to balanced."
   }
+  if ($invalidGrowth.gamification.hudFocus -ne "growth") {
+    throw "Invalid gamification.hudFocus should fall back to growth."
+  }
   if ($invalidGrowth.gamification.showGrowthChip -ne $false -or $invalidGrowth.gamification.showHoverReadout -ne $true) {
     throw "Boolean gamification values should normalize from yes/no strings."
+  }
+
+  $runtimeScript = Get-Content -Raw -LiteralPath (Join-Path $root "src\CodexyPetUsagesRing.ps1")
+  foreach ($needle in @("function Update-KeyComboState", "function Get-KeyComboMultiplier", "Rest +", "Cooldown", 'LastKeyCounterIdleSyncAt')) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Key counter combo runtime marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @("function Add-InventoryDrop", "function Get-InventoryHudText", "function Get-InventoryReadoutText", "function Get-InventoryUiText", "function Update-InventoryReadoutContent", "function Show-InventoryReadout", "function Toggle-InventoryReadout", "function Hide-InventoryReadout", "function Test-InventoryReadoutOpen", "function Set-InventoryHoverHighlight", "function Test-CursorInInventoryRange", "function Update-MouseClickHook", "function Get-ConsumedLeftMouseClickCursor", "function Invoke-InventoryToggle", "SetWindowsHookExMouse", "InstallMouseClickCounter", "UninstallMouseClickCounter", "ConsumeLeftMouseClick", "MouseHookCallback", "WH_MOUSE_LL", "WM_LBUTTONDOWN", "IsLeftMouseButtonDown", "ConsumeLeftMouseButtonClick", '0x0001', "ShowHandCursor", "IDC_HAND", "handCursor", "InventoryHitBounds", "InventoryHoverBorder", "InventoryReadoutPinned", "InventoryReadoutWindow", "InventoryReadoutGrid", "InventoryIcon", "InventoryCountBackground", "reward-chest.png", "unlock-font-pixel.png", "unlock-font-terminal.png", "unlock-theme-arcane.png", "unlock-theme-royal.png", "rewardRolls", "activeTheme")) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Inventory reward runtime marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @("ScaleTransform", "RenderTransformOrigin", "LineStackingStrategy", 'BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty')) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Key counter centering marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @("System.Windows.Documents.Run", "System.Windows.Documents.LineBreak", '$statusRun.FontSize = 13.2')) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Key counter status layout marker is missing: $needle"
+    }
+  }
+  $growthScript = Get-Content -Raw -LiteralPath (Join-Path $root "src\PetGrowth.ps1")
+  foreach ($needle in @("inventory = [ordered]@", "fontPixel", "fontTerminal", "themeArcane", "themeRoyal", "activeFont", "activeTheme", "rewardRolls", "totalDrops", "totalKeys", "lastDropItem")) {
+    if ($growthScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Inventory state marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @('GamificationHudFocus -eq "growth"', 'GamificationHudFocus -eq "combo"', "function Get-GrowthChipWidth")) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Gamification HUD focus marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @('if ($keyCounterHudVisible) { 66.0 }', 'if ($keyCounterHudVisible) { 108.0 }')) {
+    if ($runtimeScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Battery key counter spacing marker is missing: $needle"
+    }
+  }
+  if ($runtimeScript.IndexOf('$script:Style.ShowGrowthChip' + "`r`n  ) {", [System.StringComparison]::Ordinal) -ge 0) {
+    throw "Growth chip visibility must use Test-GrowthHudVisible so combo focus cannot show level chip."
+  }
+
+  $settingsHtml = Get-Content -Raw -LiteralPath (Join-Path $root "settings\index.html")
+  foreach ($needle in @("focus-control", "data-focus-panel=`"growth`"", "data-focus-panel=`"combo`"", "syncFocusPanels", "hudFocusNote", "inventory-summary", "inventoryFontPixel", "inventoryThemeArcane")) {
+    if ($settingsHtml.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Settings HUD focus UI marker is missing: $needle"
+    }
+  }
+  foreach ($needle in @("function Read-GamificationStateSummary", "gamificationState = Read-GamificationStateSummary", "function Open-SettingsUrl", "msedge.exe")) {
+    if ($settingsScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Settings inventory API marker is missing: $needle"
+    }
+  }
+  foreach ($asset in @("reward-chest.png", "inventory-snack.png", "inventory-gem.png", "inventory-ticket.png", "inventory-patch.png", "unlock-font-pixel.png", "unlock-font-terminal.png", "unlock-theme-arcane.png", "unlock-theme-royal.png")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $root "assets\runtime\$asset") -PathType Leaf)) {
+      throw "Inventory runtime asset is missing: $asset"
+    }
+  }
+  $releaseManifest = Get-Content -Raw -LiteralPath (Join-Path $root "tools\ReleaseManifest.ps1")
+  foreach ($needle in @('"assets"', '"assets/runtime/reward-chest.png"', '"assets/runtime/unlock-font-pixel.png"', '"assets/runtime/unlock-font-terminal.png"', '"assets/runtime/unlock-theme-arcane.png"', '"assets/runtime/unlock-theme-royal.png"')) {
+    if ($releaseManifest.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
+      throw "Reward chest release manifest marker is missing: $needle"
+    }
   }
 }
 
@@ -458,6 +553,9 @@ try {
   $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
   try {
     $zipEntries = @($archive.Entries | ForEach-Object { $_.FullName.TrimEnd("/") })
+    foreach ($requiredFile in $script:CodexPetRequiredFreshFiles) {
+      Assert-ZipFileMatches -Archive $archive -RelativePath $requiredFile
+    }
   } finally {
     $archive.Dispose()
   }
@@ -468,7 +566,7 @@ try {
     $_.FullName.Substring($installRoot.TrimEnd("\").Length + 1) -replace '\\', '/'
   })
   Assert-NoForbiddenPaths -Paths $installedFiles -Scope "Temp install"
-  foreach ($requiredInstallFile in @("settings/index.html", "README.ja.md", "README.zh.md")) {
+  foreach ($requiredInstallFile in $script:CodexPetRequiredFreshFiles) {
     Assert-InstalledFileMatches -InstallRoot $installRoot -RelativePath $requiredInstallFile
   }
   & (Join-Path $root "bin\powershell\Uninstall.ps1") -InstallDir $installRoot -RemoveFiles | Out-Host

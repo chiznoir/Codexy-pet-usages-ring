@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+. (Join-Path $PSScriptRoot "ReleaseManifest.ps1")
 $versionFile = Join-Path $root "VERSION"
 $version = if (Test-Path -LiteralPath $versionFile) {
   (Get-Content -Raw -LiteralPath $versionFile).Trim()
@@ -28,20 +29,7 @@ function Get-ProjectRelativePath {
 function Test-ProjectPathExcluded {
   param([string]$Path)
   $relativePath = Get-ProjectRelativePath -Path $Path
-  $leaf = Split-Path -Leaf $relativePath
-  if ($relativePath -in @(
-    ".gitignore",
-    "gamification.json",
-    "settings.json",
-    "docs/assets/current-pet-usage-capture.png",
-    "docs/assets/imagegen-hero-background.png"
-  )) { return $true }
-  if ($relativePath -like "dist/*" -or $relativePath -eq "dist") { return $true }
-  if ($relativePath -like "logs/*" -or $relativePath -eq "logs") { return $true }
-  if ($relativePath -like "qa/*" -or $relativePath -eq "qa") { return $true }
-  if ($relativePath -like "*.log" -or $relativePath -like "*.tmp" -or $relativePath -like "*.bak" -or $relativePath -like "*.zip") { return $true }
-  if ($leaf -eq ".DS_Store" -or $leaf -eq "Thumbs.db") { return $true }
-  return $false
+  return (Test-CodexPetReleasePathExcluded -RelativePath $relativePath)
 }
 
 function Copy-ReleaseItem {
@@ -69,7 +57,7 @@ if (Test-Path -LiteralPath $staging) {
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
-foreach ($item in @("Install.bat", "Start.bat", "Stop.bat", "Status.bat", "Settings.bat", "Uninstall.bat", "bin", "src", "docs", "tools", "settings", "settings.defaults.json", "README.md", "README.ko.md", "README.ja.md", "README.zh.md", "LICENSE", "NOTICE.md", "CHANGELOG.md", "SECURITY.md", "VERSION")) {
+foreach ($item in $script:CodexPetReleaseItems) {
   Copy-ReleaseItem -Name $item
 }
 

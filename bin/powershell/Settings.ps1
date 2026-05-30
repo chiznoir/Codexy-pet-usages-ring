@@ -86,6 +86,13 @@ function Normalize-GrowthMode {
   return "balanced"
 }
 
+function Normalize-GamificationHudFocus {
+  param($Value)
+  $focus = if ($null -eq $Value) { "growth" } else { ([string]$Value).Trim().ToLowerInvariant() }
+  if ($focus -in @("growth", "combo")) { return $focus }
+  return "growth"
+}
+
 function Normalize-VisibilityMode {
   param($Value)
   $visibilityMode = if ($null -eq $Value) { "hover" } else { ([string]$Value).Trim().ToLowerInvariant() }
@@ -150,8 +157,11 @@ function Get-NormalizedSettings {
     gamification = [ordered]@{
       enabled = Normalize-Bool (Get-PropertyValue $gamification "enabled" $null) $false
       growthMode = Normalize-GrowthMode (Get-PropertyValue $gamification "growthMode" $null)
+      hudFocus = Normalize-GamificationHudFocus (Get-PropertyValue $gamification "hudFocus" $null)
       showGrowthChip = Normalize-Bool (Get-PropertyValue $gamification "showGrowthChip" $null) $true
       showHoverReadout = Normalize-Bool (Get-PropertyValue $gamification "showHoverReadout" $null) $true
+      showKeyCounter = Normalize-Bool (Get-PropertyValue $gamification "showKeyCounter" $null) $true
+      showKeyEffects = Normalize-Bool (Get-PropertyValue $gamification "showKeyEffects" $null) $true
     }
   }
 }
@@ -181,6 +191,73 @@ function Read-Defaults {
     return Get-NormalizedSettings ((Read-Utf8Text -Path $script:DefaultsFile) | ConvertFrom-Json)
   }
   return Get-NormalizedSettings $null
+}
+
+function Read-GamificationStateSummary {
+  $statePath = Join-Path $env:LOCALAPPDATA "CodexyPetUsagesRing\gamification.json"
+  $empty = [ordered]@{
+    inventory = [ordered]@{
+      snack = 0
+      gem = 0
+      ticket = 0
+      patch = 0
+      fontPixel = $false
+      fontTerminal = $false
+      themeArcane = $false
+      themeRoyal = $false
+      activeFont = ""
+      activeTheme = ""
+      rewardRolls = 0
+      totalDrops = 0
+      totalKeys = 0
+      lastDropAt = $null
+      lastDropItem = ""
+    }
+  }
+  try {
+    if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { return $empty }
+    $state = (Read-Utf8Text -Path $statePath) | ConvertFrom-Json
+    $inventory = Get-PropertyValue $state "inventory" $null
+    if ($null -eq $inventory) { return $empty }
+    $fontPixel = [bool](Get-PropertyValue $inventory "fontPixel" $false)
+    $fontTerminal = [bool](Get-PropertyValue $inventory "fontTerminal" $false)
+    $themeArcane = [bool](Get-PropertyValue $inventory "themeArcane" $false)
+    $themeRoyal = [bool](Get-PropertyValue $inventory "themeRoyal" $false)
+    $cosmeticDropCount = @($fontPixel, $fontTerminal, $themeArcane, $themeRoyal).Where({ $_ }).Count
+    $activeFont = [string](Get-PropertyValue $inventory "activeFont" "")
+    if ($activeFont -notin @("fontPixel", "fontTerminal") -or -not [bool](Get-PropertyValue $inventory $activeFont $false)) { $activeFont = "" }
+    $activeTheme = [string](Get-PropertyValue $inventory "activeTheme" "")
+    if ($activeTheme -notin @("themeArcane", "themeRoyal") -or -not [bool](Get-PropertyValue $inventory $activeTheme $false)) { $activeTheme = "" }
+    $lastDropItem = [string](Get-PropertyValue $inventory "lastDropItem" "")
+    $lastDropAt = Get-PropertyValue $inventory "lastDropAt" $null
+    if ($lastDropItem -notin @("fontPixel", "fontTerminal", "themeArcane", "themeRoyal")) {
+      $lastDropItem = ""
+      $lastDropAt = $null
+    }
+    $rewardRolls = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "rewardRolls" 0))
+    if ($cosmeticDropCount -le 0) { $rewardRolls = 0 }
+    return [ordered]@{
+      inventory = [ordered]@{
+        snack = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "snack" 0))
+        gem = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "gem" 0))
+        ticket = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "ticket" 0))
+        patch = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "patch" 0))
+        fontPixel = $fontPixel
+        fontTerminal = $fontTerminal
+        themeArcane = $themeArcane
+        themeRoyal = $themeRoyal
+        activeFont = $activeFont
+        activeTheme = $activeTheme
+        rewardRolls = $rewardRolls
+        totalDrops = $cosmeticDropCount
+        totalKeys = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "totalKeys" 0))
+        lastDropAt = $lastDropAt
+        lastDropItem = $lastDropItem
+      }
+    }
+  } catch {
+    return $empty
+  }
 }
 
 function Write-JsonResponse {
@@ -241,6 +318,24 @@ function Start-SettingsListener {
   throw "Could not start a local settings server on ports $StartPort-$($StartPort + 29)."
 }
 
+function Open-SettingsUrl {
+  param([string]$Url)
+  foreach ($browser in @("msedge.exe", "chrome.exe", "firefox.exe")) {
+    try {
+      $command = Get-Command $browser -ErrorAction SilentlyContinue
+      if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+        Start-Process -FilePath $command.Source -ArgumentList @($Url) | Out-Null
+        return
+      }
+    } catch {}
+  }
+  try {
+    Start-Process -FilePath "explorer.exe" -ArgumentList @($Url) | Out-Null
+  } catch {
+    Write-Warning "Could not open settings URL automatically: $Url"
+  }
+}
+
 $projectRoot = Get-ProjectRoot
 $script:DefaultsFile = Join-Path $projectRoot "settings.defaults.json"
 $settingsHtml = Join-Path $projectRoot "settings\index.html"
@@ -262,7 +357,7 @@ Write-Output "Settings file: $script:SettingsFile"
 Write-Output "The server will stop after $TimeoutMinutes minute(s) of inactivity."
 
 if (-not $NoOpen) {
-  Start-Process $url | Out-Null
+  Open-SettingsUrl -Url $url
 }
 
 $deadline = (Get-Date).AddMinutes([Math]::Max(1, $TimeoutMinutes))
@@ -289,6 +384,7 @@ try {
           settings = Read-Settings
           settingsPath = $script:SettingsFile
           systemLanguage = Get-SystemLanguage
+          gamificationState = Read-GamificationStateSummary
         }
       } elseif ($context.Request.HttpMethod -eq "GET" -and $path -eq "/api/defaults") {
         Write-JsonResponse -Context $context -Value (Read-Defaults)

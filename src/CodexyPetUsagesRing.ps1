@@ -3,6 +3,7 @@ param(
   [switch]$NoLiveUsage,
   [int]$UsagePollSeconds = 10,
   [int]$FramePollMs = 60,
+  [int]$KeyCounterPollMs = 16,
   [int]$IdleFramePollMs = 300,
   [int]$PetPollMs = 300,
   [double]$UsageAnimationFactor = 0.22,
@@ -27,7 +28,8 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 
 $UsagePollSeconds = [Math]::Max(5, $UsagePollSeconds)
-$FramePollMs = [Math]::Max(60, $FramePollMs)
+$FramePollMs = [Math]::Max(24, $FramePollMs)
+$KeyCounterPollMs = [Math]::Max(8, $KeyCounterPollMs)
 $IdleFramePollMs = [Math]::Max($FramePollMs, $IdleFramePollMs)
 $PetPollMs = [Math]::Max(150, $PetPollMs)
 $UsageAnimationFactor = [Math]::Max(0.01, [Math]::Min(1.0, $UsageAnimationFactor))
@@ -73,6 +75,7 @@ if (-not ("CodexPetLimitRingNative" -as [type])) {
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 public static class CodexPetLimitRingNative {
     private const int GWL_EXSTYLE = -20;
@@ -83,8 +86,26 @@ public static class CodexPetLimitRingNative {
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_NOOWNERZORDER = 0x0200;
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WH_MOUSE_LL = 14;
+    private const int WM_KEYDOWN = 0x0100;
+    private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int VK_LBUTTON = 0x01;
+    private static readonly IntPtr IDC_HAND = new IntPtr(32649);
+    private static IntPtr keyboardHook = IntPtr.Zero;
+    private static IntPtr mouseHook = IntPtr.Zero;
+    private static IntPtr handCursor = IntPtr.Zero;
+    private static LowLevelKeyboardProc keyboardProc = KeyboardHookCallback;
+    private static LowLevelMouseProc mouseProc = MouseHookCallback;
+    private static int pendingKeyPresses = 0;
+    private static int pendingLeftMouseClicks = 0;
+    private static int lastLeftClickX = 0;
+    private static int lastLeftClickY = 0;
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT {
@@ -92,6 +113,21 @@ public static class CodexPetLimitRingNative {
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSLLHOOKSTRUCT {
+        public POINT Pt;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public IntPtr ExtraInfo;
     }
 
     [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW")]
@@ -126,6 +162,30 @@ public static class CodexPetLimitRingNative {
     [DllImport("psapi.dll")]
     private static extern bool EmptyWorkingSet(IntPtr hProcess);
 
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", EntryPoint="SetWindowsHookEx", SetLastError=true)]
+    private static extern IntPtr SetWindowsHookExMouse(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError=true)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet=CharSet.Auto, SetLastError=true)]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetCursor(IntPtr hCursor);
+
     public static void MakeClickThrough(IntPtr hWnd) {
         IntPtr style = GetWindowLongPtr64(hWnd, GWL_EXSTYLE);
         long newStyle = style.ToInt64()
@@ -133,6 +193,109 @@ public static class CodexPetLimitRingNative {
             | WS_EX_TOOLWINDOW.ToInt64()
             | WS_EX_NOACTIVATE.ToInt64();
         SetWindowLongPtr64(hWnd, GWL_EXSTYLE, new IntPtr(newStyle));
+    }
+
+    public static bool InstallKeyboardCounter() {
+        if (keyboardHook != IntPtr.Zero) {
+            return true;
+        }
+        try {
+            using (Process process = Process.GetCurrentProcess()) {
+                using (ProcessModule module = process.MainModule) {
+                    keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboardProc, GetModuleHandle(module.ModuleName), 0);
+                }
+            }
+        } catch {
+            keyboardHook = IntPtr.Zero;
+        }
+        return keyboardHook != IntPtr.Zero;
+    }
+
+    public static void UninstallKeyboardCounter() {
+        if (keyboardHook != IntPtr.Zero) {
+            try {
+                UnhookWindowsHookEx(keyboardHook);
+            } catch {
+            }
+            keyboardHook = IntPtr.Zero;
+        }
+        Interlocked.Exchange(ref pendingKeyPresses, 0);
+    }
+
+    public static int ConsumeKeyPresses() {
+        return Interlocked.Exchange(ref pendingKeyPresses, 0);
+    }
+
+    public static bool InstallMouseClickCounter() {
+        if (mouseHook != IntPtr.Zero) {
+            return true;
+        }
+        try {
+            using (Process process = Process.GetCurrentProcess()) {
+                using (ProcessModule module = process.MainModule) {
+                    mouseHook = SetWindowsHookExMouse(WH_MOUSE_LL, mouseProc, GetModuleHandle(module.ModuleName), 0);
+                }
+            }
+        } catch {
+            mouseHook = IntPtr.Zero;
+        }
+        return mouseHook != IntPtr.Zero;
+    }
+
+    public static void UninstallMouseClickCounter() {
+        if (mouseHook != IntPtr.Zero) {
+            try {
+                UnhookWindowsHookEx(mouseHook);
+            } catch {
+            }
+            mouseHook = IntPtr.Zero;
+        }
+        Interlocked.Exchange(ref pendingLeftMouseClicks, 0);
+    }
+
+    public static string ConsumeLeftMouseClick() {
+        int clicks = Interlocked.Exchange(ref pendingLeftMouseClicks, 0);
+        if (clicks <= 0) {
+            return "";
+        }
+        return lastLeftClickX.ToString() + "," + lastLeftClickY.ToString() + "," + clicks.ToString();
+    }
+
+    public static bool IsLeftMouseButtonDown() {
+        return (GetAsyncKeyState(VK_LBUTTON) & unchecked((short)0x8000)) != 0;
+    }
+
+    public static bool ConsumeLeftMouseButtonClick() {
+        return (GetAsyncKeyState(VK_LBUTTON) & 0x0001) != 0;
+    }
+
+    public static void ShowHandCursor() {
+        if (handCursor == IntPtr.Zero) {
+            handCursor = LoadCursor(IntPtr.Zero, IDC_HAND);
+        }
+        if (handCursor != IntPtr.Zero) {
+            SetCursor(handCursor);
+        }
+    }
+
+    private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && (wParam.ToInt32() == WM_KEYDOWN || wParam.ToInt32() == WM_SYSKEYDOWN)) {
+            Interlocked.Increment(ref pendingKeyPresses);
+        }
+        return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
+    }
+
+    private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && wParam.ToInt32() == WM_LBUTTONDOWN) {
+            try {
+                MSLLHOOKSTRUCT data = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                Interlocked.Exchange(ref lastLeftClickX, data.Pt.X);
+                Interlocked.Exchange(ref lastLeftClickY, data.Pt.Y);
+                Interlocked.Increment(ref pendingLeftMouseClicks);
+            } catch {
+            }
+        }
+        return CallNextHookEx(mouseHook, nCode, wParam, lParam);
     }
 
     private static bool Overlaps(RECT rect, int left, int top, int right, int bottom) {
@@ -249,6 +412,13 @@ if ([string]::IsNullOrWhiteSpace($SettingsPath)) {
 $SettingsPath = [System.IO.Path]::GetFullPath($SettingsPath)
 $SettingsDefaultsPath = Join-Path $ProjectRoot "settings.defaults.json"
 $PetGrowthScriptPath = Join-Path $ProjectRoot "src\PetGrowth.ps1"
+$RewardChestIconPath = Join-Path $ProjectRoot "assets\runtime\reward-chest.png"
+$InventoryIconPaths = @{
+  fontPixel = Join-Path $ProjectRoot "assets\runtime\unlock-font-pixel.png"
+  fontTerminal = Join-Path $ProjectRoot "assets\runtime\unlock-font-terminal.png"
+  themeArcane = Join-Path $ProjectRoot "assets\runtime\unlock-theme-arcane.png"
+  themeRoyal = Join-Path $ProjectRoot "assets\runtime\unlock-theme-royal.png"
+}
 if (-not (Test-Path -LiteralPath $PetGrowthScriptPath)) {
   throw "Missing pet growth helper: $PetGrowthScriptPath"
 }
@@ -291,6 +461,10 @@ $script:BatterySecondaryBounds = $null
 $script:BadgePrimaryBounds = $null
 $script:BadgeSecondaryBounds = $null
 $script:GrowthChipBounds = $null
+$script:KeyCounterBounds = $null
+$script:InventoryBounds = $null
+$script:InventoryHitBounds = $null
+$script:InventoryReadoutPinned = $false
 $script:LastReadoutRefreshAt = [datetime]::MinValue
 $script:LastHoverSignature = ""
 $script:RingVisualsVisible = $null
@@ -298,6 +472,30 @@ $script:RingAnimationToken = 0
 $script:SettingsLastWriteTimeUtc = [datetime]::MinValue
 $script:PetGrowthState = New-PetGrowthState
 $script:LastGrowthSaveAt = [datetime]::MinValue
+$script:KeyCounterInstalled = $false
+$script:KeyPressCount = 0
+$script:KeyComboCount = 0
+$script:KeyComboMultiplier = 1
+$script:KeyFlowState = ""
+$script:KeyFlowStateUntil = [datetime]::MinValue
+$script:LastKeyInputAt = [datetime]::MinValue
+$script:LastKeyBurstAt = [datetime]::MinValue
+$script:LastKeyCounterDigits = 1
+$script:LastKeyCounterVisualSignature = ""
+$script:LastKeyCounterIdleSyncAt = [datetime]::MinValue
+$script:LastKeyHookAttemptAt = [datetime]::MinValue
+$script:KeyHookFailureLogged = $false
+$script:LastKeyRestBonusAt = [datetime]::MinValue
+$script:MouseClickCounterInstalled = $false
+$script:LastMouseHookAttemptAt = [datetime]::MinValue
+$script:MouseHookFailureLogged = $false
+$script:LastInventoryToggleAt = [datetime]::MinValue
+$script:InventoryMouseWasDown = $false
+$script:InventoryItemLabelBlocks = @{}
+$script:InventoryItemCountBlocks = @{}
+$script:InventoryItemBorders = @{}
+$script:HudCenterX = $null
+$script:HudRingSize = $null
 $script:Style = [ordered]@{
   Language = "auto"
   DisplayMode = "ring"
@@ -324,8 +522,11 @@ $script:Style = [ordered]@{
   FadeOutMs = 180.0
   GamificationEnabled = $false
   GrowthMode = "balanced"
+  GamificationHudFocus = "growth"
   ShowGrowthChip = $true
   ShowGrowthHoverReadout = $true
+  ShowKeyCounter = $true
+  ShowKeyEffects = $true
 }
 $script:RingsEnabled = $true
 
@@ -341,6 +542,28 @@ function New-Brush {
 function New-StyleBrush {
   param([byte]$Opacity, [int[]]$Rgb)
   return New-Brush $Opacity ([byte]$Rgb[0]) ([byte]$Rgb[1]) ([byte]$Rgb[2])
+}
+
+function New-RuntimeImageSource {
+  param([string]$Path, [string]$Name, [int]$DecodePixelWidth = 64)
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+  try {
+    $bitmap = [System.Windows.Media.Imaging.BitmapImage]::new()
+    $bitmap.BeginInit()
+    $bitmap.UriSource = [System.Uri]::new($Path, [System.UriKind]::Absolute)
+    $bitmap.DecodePixelWidth = $DecodePixelWidth
+    $bitmap.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+    $bitmap.EndInit()
+    $bitmap.Freeze()
+    return $bitmap
+  } catch {
+    Write-AppLog "$Name icon load failed: $($_.Exception.Message)"
+    return $null
+  }
+}
+
+function New-RewardChestImageSource {
+  return New-RuntimeImageSource -Path $RewardChestIconPath -Name "Reward chest" -DecodePixelWidth 64
 }
 
 function Get-PropertyValue {
@@ -443,8 +666,11 @@ function Ensure-SettingsFile {
     gamification = [ordered]@{
       enabled = $false
       growthMode = "balanced"
+      hudFocus = "growth"
       showGrowthChip = $true
       showHoverReadout = $true
+      showKeyCounter = $true
+      showKeyEffects = $true
     }
   }
   ($fallback | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $SettingsPath -Encoding UTF8
@@ -536,8 +762,13 @@ function Update-StyleFromSettings {
     $growthMode = ([string](Get-PropertyValue $gamification "growthMode" "balanced")).Trim().ToLowerInvariant()
     if ($growthMode -notin @("conserve", "balanced", "active")) { $growthMode = "balanced" }
     $script:Style.GrowthMode = $growthMode
+    $hudFocus = ([string](Get-PropertyValue $gamification "hudFocus" "growth")).Trim().ToLowerInvariant()
+    if ($hudFocus -notin @("growth", "combo")) { $hudFocus = "growth" }
+    $script:Style.GamificationHudFocus = $hudFocus
     $script:Style.ShowGrowthChip = Convert-SettingBool (Get-PropertyValue $gamification "showGrowthChip" $null) $true
     $script:Style.ShowGrowthHoverReadout = Convert-SettingBool (Get-PropertyValue $gamification "showHoverReadout" $null) $true
+    $script:Style.ShowKeyCounter = Convert-SettingBool (Get-PropertyValue $gamification "showKeyCounter" $null) $true
+    $script:Style.ShowKeyEffects = Convert-SettingBool (Get-PropertyValue $gamification "showKeyEffects" $null) $true
     $script:SettingsLastWriteTimeUtc = $item.LastWriteTimeUtc
     return $true
   } catch {
@@ -613,8 +844,52 @@ function Apply-StyleSettings {
     $script:GrowthReadoutText.FontSize = [double]$script:Style.ReadoutFontSize
     $script:GrowthReadoutText.LineHeight = [double]$script:Style.ReadoutLineHeight
   }
+  if ($null -ne $script:InventoryReadoutText) {
+    $script:InventoryReadoutText.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+    $script:InventoryReadoutText.FontSize = [double]$script:Style.ReadoutFontSize
+    $script:InventoryReadoutText.LineHeight = [double]$script:Style.ReadoutLineHeight
+  }
   if ($null -ne $script:GrowthReadoutBorder) {
     $script:GrowthReadoutBorder.Background = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.OuterReadoutBgRgb)
+  }
+  if ($null -ne $script:InventoryReadoutBorder) {
+    $script:InventoryReadoutBorder.Background = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.InnerReadoutBgRgb)
+  }
+  if ($null -ne $script:InventoryReadoutTitle) {
+    $script:InventoryReadoutTitle.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+  }
+  if ($null -ne $script:InventoryReadoutStats) {
+    $script:InventoryReadoutStats.Foreground = New-StyleBrush ([byte][Math]::Max(120, [Math]::Min(255, [int]$script:Style.ReadoutTextOpacity - 24))) ([int[]]$script:Style.ReadoutTextRgb)
+  }
+  if ($null -ne $script:InventoryReadoutHint) {
+    $script:InventoryReadoutHint.Foreground = New-StyleBrush ([byte][Math]::Max(112, [Math]::Min(255, [int]$script:Style.ReadoutTextOpacity - 38))) ([int[]]$script:Style.ReadoutTextRgb)
+  }
+  foreach ($countBlock in $script:InventoryItemCountBlocks.Values) {
+    $countBlock.Foreground = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  }
+  if ($null -ne $script:KeyCounterBackground) {
+    $script:KeyCounterBackground.Fill = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.OuterReadoutBgRgb)
+    $script:KeyCounterBackground.Stroke = New-StyleBrush ([byte][Math]::Max(24, [Math]::Min(255, [int]$script:Style.TrackOpacity + 42))) ([int[]]$script:Style.TrackRgb)
+  }
+  if ($null -ne $script:KeyCounterAccent) {
+    $script:KeyCounterAccent.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  }
+  if ($null -ne $script:KeyCounterLabel) {
+    $script:KeyCounterLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+  }
+  if ($null -ne $script:InventoryBackground) {
+    $script:InventoryBackground.Fill = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.InnerReadoutBgRgb)
+    $script:InventoryBackground.Stroke = New-StyleBrush ([byte][Math]::Max(24, [Math]::Min(255, [int]$script:Style.TrackOpacity + 36))) ([int[]]$script:Style.TrackRgb)
+  }
+  if ($null -ne $script:InventoryHoverBorder) {
+    $script:InventoryHoverBorder.Stroke = New-Brush 236 255 218 0
+    $script:InventoryHoverBorder.Fill = New-Brush 22 255 218 0
+  }
+  if ($null -ne $script:InventoryCountBackground) {
+    $script:InventoryCountBackground.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  }
+  if ($null -ne $script:InventoryLabel) {
+    $script:InventoryLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
   }
   Update-RingGeometry
   [void](Update-ReadoutText -Force)
@@ -1375,8 +1650,45 @@ function Update-ReadoutText {
   if ($null -ne $script:GrowthReadoutText) {
     $script:GrowthReadoutText.Text = Get-PetGrowthReadoutText
   }
+  Update-InventoryReadoutContent
   $script:LastReadoutRefreshAt = $now
   return $true
+}
+
+function Test-InventoryReadoutOpen {
+  return (
+    $null -ne $script:InventoryReadoutWindow -and
+    $script:InventoryReadoutWindow.IsVisible -and
+    [bool]$script:InventoryReadoutPinned
+  )
+}
+
+function Set-InventoryHoverHighlight {
+  param([bool]$Visible)
+  if ($null -eq $script:InventoryHoverBorder) { return }
+  if (
+    -not $Visible -or
+    $null -eq $script:InventoryHitBounds -or
+    -not (Test-InventoryHudVisible)
+  ) {
+    $script:InventoryHoverBorder.Visibility = [System.Windows.Visibility]::Collapsed
+    return
+  }
+
+  $bounds = $script:InventoryHitBounds
+  Set-RectangleBounds $script:InventoryHoverBorder ([double]$bounds.X) ([double]$bounds.Y) ([double]$bounds.Width) ([double]$bounds.Height)
+  $script:InventoryHoverBorder.Visibility = [System.Windows.Visibility]::Visible
+}
+
+function Hide-InventoryReadout {
+  param([switch]$ResetPinned)
+  if ($ResetPinned) { $script:InventoryReadoutPinned = $false }
+  if ($null -ne $script:InventoryReadoutBorder) {
+    $script:InventoryReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+  }
+  if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+    $script:InventoryReadoutWindow.Hide()
+  }
 }
 
 function Hide-RingReadouts {
@@ -1398,6 +1710,9 @@ function Hide-RingReadouts {
   }
   if ($null -ne $script:GrowthReadoutWindow -and $script:GrowthReadoutWindow.IsVisible) {
     $script:GrowthReadoutWindow.Hide()
+  }
+  if (-not (Test-InventoryReadoutOpen)) {
+    Hide-InventoryReadout -ResetPinned
   }
 }
 
@@ -1424,7 +1739,13 @@ function Set-RingShapesVisibility {
     $script:SecondaryBadgeLabel,
     $script:GrowthChipBackground,
     $script:GrowthChipAccent,
-    $script:GrowthChipLabel
+    $script:GrowthChipLabel,
+    $script:KeyCounterBackground,
+    $script:KeyCounterLabel,
+    $script:InventoryBackground,
+    $script:InventoryIcon,
+    $script:InventoryCountBackground,
+    $script:InventoryLabel
   )) {
     if ($null -ne $shape) {
       $shape.Visibility = $Visibility
@@ -1476,8 +1797,7 @@ function Update-ModeShapeVisibility {
   }
   $growthVisibility = if (
     $script:RingVisualsVisible -and
-    $script:Style.GamificationEnabled -and
-    $script:Style.ShowGrowthChip
+    (Test-GrowthHudVisible)
   ) {
     [System.Windows.Visibility]::Visible
   } else {
@@ -1485,6 +1805,30 @@ function Update-ModeShapeVisibility {
   }
   foreach ($shape in @($script:GrowthChipBackground, $script:GrowthChipAccent, $script:GrowthChipLabel)) {
     if ($null -ne $shape) { $shape.Visibility = $growthVisibility }
+  }
+
+  $keyCounterVisibility = if (
+    $script:RingVisualsVisible -and
+    (Test-KeyCounterHudVisible)
+  ) {
+    [System.Windows.Visibility]::Visible
+  } else {
+    [System.Windows.Visibility]::Collapsed
+  }
+  foreach ($shape in @($script:KeyCounterBackground, $script:KeyCounterLabel)) {
+    if ($null -ne $shape) { $shape.Visibility = $keyCounterVisibility }
+  }
+  if ($null -ne $script:KeyCounterAccent) { $script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Collapsed }
+  $inventoryVisibility = if (
+    $script:RingVisualsVisible -and
+    (Test-InventoryHudVisible)
+  ) {
+    [System.Windows.Visibility]::Visible
+  } else {
+    [System.Windows.Visibility]::Collapsed
+  }
+  foreach ($shape in @($script:InventoryIcon, $script:InventoryCountBackground, $script:InventoryLabel)) {
+    if ($null -ne $shape) { $shape.Visibility = $inventoryVisibility }
   }
 }
 
@@ -1512,7 +1856,829 @@ function Update-PetGrowthVisualText {
 }
 
 function Test-GrowthHudVisible {
-  return ($script:Style.GamificationEnabled -and $script:Style.ShowGrowthChip)
+  return ($script:Style.GamificationEnabled -and $script:Style.ShowGrowthChip -and [string]$script:Style.GamificationHudFocus -eq "growth")
+}
+
+function Test-KeyCounterHudVisible {
+  return ([bool]$script:Style.GamificationEnabled -and [bool]$script:Style.ShowKeyCounter -and [string]$script:Style.GamificationHudFocus -eq "combo")
+}
+
+function Test-InventoryHudVisible {
+  return ((Test-KeyCounterHudVisible) -and [string]$script:Style.DisplayMode -ne "badge")
+}
+
+function Get-GrowthChipWidth {
+  $text = Get-PetGrowthChipText
+  return [Math]::Max(104.0, [Math]::Min(132.0, 30.0 + ([double]$text.Length * 9.0)))
+}
+
+function Get-KeyCounterChipWidth {
+  param([string]$Mode = "")
+  $digits = ([string]([int]$script:KeyPressCount)).Length
+  $status = Get-KeyCounterStatusText
+  $digitWidth = 34.0 + ($digits * 16.0)
+  $statusWidth = if ([string]::IsNullOrWhiteSpace($status)) { 0.0 } else { [Math]::Min(142.0, 34.0 + ([double]$status.Length * 8.8)) }
+  if ($Mode -eq "badge") { return [Math]::Max(72.0, [Math]::Max($digitWidth, $statusWidth)) }
+  if ($Mode -eq "battery") { return [Math]::Max(84.0, [Math]::Max($digitWidth, $statusWidth)) }
+  return [Math]::Max(84.0, [Math]::Max($digitWidth, $statusWidth))
+}
+
+function Get-BatteryHudBarWidth {
+  $baseWidth = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX * 2.0 } elseif ($null -ne $script:Window) { [double]$script:Window.Width } else { 164.0 }
+  return [Math]::Min(132.0, [Math]::Max(96.0, $baseWidth - 22.0))
+}
+
+function Get-BadgeHudWidth {
+  $baseWidth = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX * 2.0 } elseif ($null -ne $script:Window) { [double]$script:Window.Width } else { 164.0 }
+  if (Test-KeyCounterHudVisible) {
+    return [Math]::Min(246.0, [Math]::Max(226.0, $baseWidth - 8.0))
+  }
+  return [Math]::Min(156.0, [Math]::Max(128.0, $baseWidth - 18.0))
+}
+
+function Get-KeyCounterText {
+  $status = Get-KeyCounterStatusText
+  if ([string]::IsNullOrWhiteSpace($status)) {
+    return "{0}" -f ([int]$script:KeyPressCount)
+  }
+  return "{0}`n{1}" -f ([int]$script:KeyPressCount), $status
+}
+
+function Get-KeyCounterStatusText {
+  if ([string]$script:Style.GamificationHudFocus -ne "combo") { return "" }
+  $now = Get-Date
+  if ($script:KeyFlowStateUntil -gt $now -and -not [string]::IsNullOrWhiteSpace([string]$script:KeyFlowState)) {
+    return [string]$script:KeyFlowState
+  }
+  if ($script:LastKeyInputAt -ne [datetime]::MinValue -and ($now - $script:LastKeyInputAt).TotalSeconds -gt 8.5) {
+    return ""
+  }
+  if ([int]$script:KeyComboMultiplier -gt 1) {
+    return "x{0} {1}" -f ([int]$script:KeyComboMultiplier), (Get-KeyFlowName -Multiplier ([int]$script:KeyComboMultiplier) -ComboCount ([int]$script:KeyComboCount))
+  }
+  return ""
+}
+
+function Get-InventoryState {
+  $inventory = $script:PetGrowthState.PSObject.Properties["inventory"]
+  if ($null -eq $inventory -or $null -eq $inventory.Value) {
+    $script:PetGrowthState = Normalize-PetGrowthState -State $script:PetGrowthState
+    return $script:PetGrowthState.inventory
+  }
+  return $inventory.Value
+}
+
+function Get-InventoryUnlockCount {
+  param($Inventory)
+  if ($null -eq $Inventory) { return 0 }
+  $count = 0
+  foreach ($key in @("fontPixel", "fontTerminal", "themeArcane", "themeRoyal")) {
+    try {
+      if ([bool]$Inventory.$key) { $count++ }
+    } catch {}
+  }
+  return $count
+}
+
+function Get-CosmeticFontFamily {
+  $inventory = Get-InventoryState
+  switch ([string]$inventory.activeFont) {
+    "fontPixel" { return [System.Windows.Media.FontFamily]::new("Courier New") }
+    "fontTerminal" { return [System.Windows.Media.FontFamily]::new("Consolas") }
+    default { return [System.Windows.Media.FontFamily]::new("Segoe UI") }
+  }
+}
+
+function Get-CosmeticAccentRgb {
+  $inventory = Get-InventoryState
+  switch ([string]$inventory.activeTheme) {
+    "themeArcane" { return @(92, 184, 255) }
+    "themeRoyal" { return @(255, 202, 64) }
+    default { return [int[]]$script:Style.PrimaryRgb }
+  }
+}
+
+function Apply-CosmeticUnlockVisuals {
+  $font = Get-CosmeticFontFamily
+  foreach ($text in @(
+    $script:PrimaryBatteryLabel,
+    $script:SecondaryBatteryLabel,
+    $script:PrimaryBadgeLabel,
+    $script:SecondaryBadgeLabel,
+    $script:GrowthChipLabel,
+    $script:KeyCounterLabel,
+    $script:InventoryLabel,
+    $script:OuterReadoutText,
+    $script:InnerReadoutText,
+    $script:GrowthReadoutText,
+    $script:InventoryReadoutText,
+    $script:InventoryReadoutTitle,
+    $script:InventoryReadoutHint,
+    $script:InventoryReadoutStats
+  )) {
+    if ($null -ne $text) { $text.FontFamily = $font }
+  }
+  foreach ($label in $script:InventoryItemLabelBlocks.Values) { $label.FontFamily = $font }
+  foreach ($count in $script:InventoryItemCountBlocks.Values) { $count.FontFamily = $font }
+
+  $accent = Get-CosmeticAccentRgb
+  if ($null -ne $script:InventoryCountBackground) {
+    $script:InventoryCountBackground.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$accent)
+  }
+  if ($null -ne $script:InventoryHoverBorder) {
+    $script:InventoryHoverBorder.Stroke = New-StyleBrush 236 ([int[]]$accent)
+    $script:InventoryHoverBorder.Fill = New-StyleBrush 24 ([int[]]$accent)
+  }
+  foreach ($count in $script:InventoryItemCountBlocks.Values) {
+    $count.Foreground = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$accent)
+  }
+}
+
+function Get-InventoryHudWidth {
+  return 46.0
+}
+
+function Get-InventoryHudText {
+  $inventory = Get-InventoryState
+  $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
+  if ($totalDrops -gt 99) { return "99+" }
+  return "{0}" -f $totalDrops
+}
+
+function Get-InventoryUiText {
+  param([string]$Key)
+  $language = Get-EffectiveLanguage
+  if ($language -eq "ko") {
+    switch ($Key) {
+      "Title" { return (Expand-UnicodeText "\uBCF4\uC0C1 \uBCF4\uAD00\uD568") }
+      "EmptyHint" { return (Expand-UnicodeText "\uD76C\uADC0 \uD574\uAE08\uC740 \uB9E4\uC6B0 \uB4DC\uBB3C\uAC8C \uB4F1\uC7A5\uD574\uC694") }
+      "Drops" { return (Expand-UnicodeText "\uD574\uAE08 {0}") }
+      "Keys" { return (Expand-UnicodeText "\uB204\uC801 \uD0A4 {0}") }
+      "Last" { return (Expand-UnicodeText "\uB9C8\uC9C0\uB9C9 {0}") }
+      "None" { return (Expand-UnicodeText "\uC5C6\uC74C") }
+      "Locked" { return (Expand-UnicodeText "\uC7A0\uAE40") }
+      "Unlocked" { return (Expand-UnicodeText "\uD574\uAE08") }
+      "fontPixel" { return (Expand-UnicodeText "\uD53D\uC140 \uD3F0\uD2B8") }
+      "fontTerminal" { return (Expand-UnicodeText "\uD130\uBBF8\uB110 \uD3F0\uD2B8") }
+      "themeArcane" { return (Expand-UnicodeText "\uC544\uCF00\uC778 \uD14C\uB9C8") }
+      "themeRoyal" { return (Expand-UnicodeText "\uB85C\uC5F4 \uD14C\uB9C8") }
+    }
+  }
+  if ($language -eq "ja") {
+    switch ($Key) {
+      "Title" { return (Expand-UnicodeText "\u5831\u916C\u30DC\u30C3\u30AF\u30B9") }
+      "EmptyHint" { return (Expand-UnicodeText "\u30EC\u30A2\u89E3\u653E\u306F\u3068\u3066\u3082\u4F4E\u78BA\u7387\u3067\u3059") }
+      "Drops" { return (Expand-UnicodeText "\u89E3\u653E {0}") }
+      "Keys" { return (Expand-UnicodeText "\u7D2F\u8A08\u30AD\u30FC {0}") }
+      "Last" { return (Expand-UnicodeText "\u6700\u5F8C {0}") }
+      "None" { return (Expand-UnicodeText "\u306A\u3057") }
+      "Locked" { return (Expand-UnicodeText "\u672A\u89E3\u653E") }
+      "Unlocked" { return (Expand-UnicodeText "\u89E3\u653E\u6E08\u307F") }
+      "fontPixel" { return (Expand-UnicodeText "\u30D4\u30AF\u30BB\u30EB\u30D5\u30A9\u30F3\u30C8") }
+      "fontTerminal" { return (Expand-UnicodeText "\u30BF\u30FC\u30DF\u30CA\u30EB\u30D5\u30A9\u30F3\u30C8") }
+      "themeArcane" { return (Expand-UnicodeText "\u30A2\u30FC\u30B1\u30A4\u30F3\u30C6\u30FC\u30DE") }
+      "themeRoyal" { return (Expand-UnicodeText "\u30ED\u30A4\u30E4\u30EB\u30C6\u30FC\u30DE") }
+    }
+  }
+  if ($language -eq "zh") {
+    switch ($Key) {
+      "Title" { return (Expand-UnicodeText "\u5956\u52B1\u6536\u85CF\u7BB1") }
+      "EmptyHint" { return (Expand-UnicodeText "\u7A00\u6709\u89E3\u9501\u4F1A\u4EE5\u5F88\u4F4E\u6982\u7387\u51FA\u73B0") }
+      "Drops" { return (Expand-UnicodeText "\u89E3\u9501 {0}") }
+      "Keys" { return (Expand-UnicodeText "\u7D2F\u8BA1\u6309\u952E {0}") }
+      "Last" { return (Expand-UnicodeText "\u6700\u540E {0}") }
+      "None" { return (Expand-UnicodeText "\u65E0") }
+      "Locked" { return (Expand-UnicodeText "\u672A\u89E3\u9501") }
+      "Unlocked" { return (Expand-UnicodeText "\u5DF2\u89E3\u9501") }
+      "fontPixel" { return (Expand-UnicodeText "\u50CF\u7D20\u5B57\u4F53") }
+      "fontTerminal" { return (Expand-UnicodeText "\u7EC8\u7AEF\u5B57\u4F53") }
+      "themeArcane" { return (Expand-UnicodeText "\u79D8\u6CD5\u4E3B\u9898") }
+      "themeRoyal" { return (Expand-UnicodeText "\u7687\u5BB6\u4E3B\u9898") }
+    }
+  }
+  switch ($Key) {
+    "Title" { return "Reward Chest" }
+    "EmptyHint" { return "Rare unlocks drop at a very low chance" }
+    "Drops" { return "Unlocks {0}" }
+    "Keys" { return "Keys {0}" }
+    "Last" { return "Last {0}" }
+    "None" { return "None" }
+    "Locked" { return "Locked" }
+    "Unlocked" { return "Unlocked" }
+    "fontPixel" { return "Pixel Font" }
+    "fontTerminal" { return "Terminal Font" }
+    "themeArcane" { return "Arcane Theme" }
+    "themeRoyal" { return "Royal Theme" }
+  }
+  return $Key
+}
+
+function Get-InventoryReadoutText {
+  $inventory = Get-InventoryState
+  $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
+  $totalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
+  $lastItem = Get-DropItemLabel -Item ([string]$inventory.lastDropItem)
+  if ([string]::IsNullOrWhiteSpace($lastItem)) { $lastItem = Get-InventoryUiText -Key "None" }
+  return "{0}`n{1}`n{2}  {3}" -f `
+    (Get-InventoryUiText -Key "Title"),
+    ((Get-InventoryUiText -Key "Drops") -f $totalDrops),
+    ((Get-InventoryUiText -Key "Keys") -f $totalKeys),
+    ((Get-InventoryUiText -Key "Last") -f $lastItem)
+}
+
+function Update-InventoryReadoutContent {
+  $inventory = Get-InventoryState
+  $unlocks = @{
+    fontPixel = [bool]$inventory.fontPixel
+    fontTerminal = [bool]$inventory.fontTerminal
+    themeArcane = [bool]$inventory.themeArcane
+    themeRoyal = [bool]$inventory.themeRoyal
+  }
+  foreach ($key in @("fontPixel", "fontTerminal", "themeArcane", "themeRoyal")) {
+    if ($script:InventoryItemLabelBlocks.ContainsKey($key)) {
+      $script:InventoryItemLabelBlocks[$key].Text = Get-InventoryUiText -Key $key
+    }
+    if ($script:InventoryItemCountBlocks.ContainsKey($key)) {
+      $script:InventoryItemCountBlocks[$key].Text = if ($unlocks[$key]) { Get-InventoryUiText -Key "Unlocked" } else { Get-InventoryUiText -Key "Locked" }
+    }
+    if ($script:InventoryItemBorders.ContainsKey($key)) {
+      $script:InventoryItemBorders[$key].Opacity = if ($unlocks[$key]) { 1.0 } else { 0.45 }
+    }
+  }
+
+  $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
+  $totalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
+  $lastItem = Get-DropItemLabel -Item ([string]$inventory.lastDropItem)
+  if ([string]::IsNullOrWhiteSpace($lastItem)) { $lastItem = Get-InventoryUiText -Key "None" }
+
+  if ($null -ne $script:InventoryReadoutTitle) {
+    $script:InventoryReadoutTitle.Text = Get-InventoryUiText -Key "Title"
+  }
+  if ($null -ne $script:InventoryReadoutHint) {
+    $script:InventoryReadoutHint.Text = if ($totalDrops -gt 0) {
+      ((Get-InventoryUiText -Key "Last") -f $lastItem)
+    } else {
+      Get-InventoryUiText -Key "EmptyHint"
+    }
+  }
+  if ($null -ne $script:InventoryReadoutStats) {
+    $script:InventoryReadoutStats.Text = "{0}  {1}" -f `
+      ((Get-InventoryUiText -Key "Drops") -f $totalDrops),
+      ((Get-InventoryUiText -Key "Keys") -f $totalKeys)
+  }
+  if ($null -ne $script:InventoryReadoutText) {
+    $script:InventoryReadoutText.Text = Get-InventoryReadoutText
+  }
+  Apply-CosmeticUnlockVisuals
+}
+
+function Get-RandomDropItem {
+  $inventory = Get-InventoryState
+  $candidates = @()
+  if (-not [bool]$inventory.fontPixel) { $candidates += "fontPixel" }
+  if (-not [bool]$inventory.fontTerminal) { $candidates += "fontTerminal" }
+  if (-not [bool]$inventory.themeArcane) { $candidates += "themeArcane" }
+  if (-not [bool]$inventory.themeRoyal) { $candidates += "themeRoyal" }
+  if ($candidates.Count -le 0) { return "" }
+  return $candidates[(Get-Random -Minimum 0 -Maximum $candidates.Count)]
+}
+
+function Add-InventoryDrop {
+  param([int]$Delta)
+  if ($Delta -le 0) { return $null }
+  $inventory = Get-InventoryState
+  $oldTotalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
+  $newTotalKeys = $oldTotalKeys + [Math]::Max(0, [int]$Delta)
+  $inventory.totalKeys = $newTotalKeys
+  $oldBucket = [Math]::Floor($oldTotalKeys / 100.0)
+  $newBucket = [Math]::Floor($newTotalKeys / 100.0)
+  if ($newBucket -le $oldBucket) {
+    Save-PetGrowthState
+    return $null
+  }
+
+  $inventory.rewardRolls = [Math]::Max(0, [int]$inventory.rewardRolls) + ([int]$newBucket - [int]$oldBucket)
+  $roll = Get-Random -Minimum 1 -Maximum 1001
+  if ($roll -gt 25) {
+    Save-PetGrowthState
+    return $null
+  }
+
+  $item = Get-RandomDropItem
+  if ([string]::IsNullOrWhiteSpace($item)) {
+    Save-PetGrowthState
+    return $null
+  }
+  $inventory.$item = $true
+  if ($item -like "font*") { $inventory.activeFont = $item }
+  if ($item -like "theme*") { $inventory.activeTheme = $item }
+  $inventory.totalDrops = [Math]::Max(0, [int]$inventory.totalDrops) + 1
+  $inventory.lastDropItem = $item
+  $inventory.lastDropAt = (Get-Date).ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
+  Save-PetGrowthState -Force
+  return $item
+}
+
+function Get-DropItemLabel {
+  param([string]$Item)
+  switch ($Item) {
+    "fontPixel" { return (Get-InventoryUiText -Key "fontPixel") }
+    "fontTerminal" { return (Get-InventoryUiText -Key "fontTerminal") }
+    "themeArcane" { return (Get-InventoryUiText -Key "themeArcane") }
+    "themeRoyal" { return (Get-InventoryUiText -Key "themeRoyal") }
+    default { return "" }
+  }
+}
+
+function Get-KeyFlowName {
+  param([int]$Multiplier, [int]$ComboCount)
+  if ($ComboCount -ge 70) { return "Cooldown" }
+  if ($Multiplier -ge 5) { return "Papang" }
+  if ($Multiplier -ge 4) { return "Rush" }
+  if ($Multiplier -ge 3) { return "Flow" }
+  if ($Multiplier -ge 2) { return "Warmup" }
+  return ""
+}
+
+function Get-KeyComboMultiplier {
+  param([int]$ComboCount)
+  if ($ComboCount -ge 70) { return 3 }
+  if ($ComboCount -ge 45) { return 5 }
+  if ($ComboCount -ge 28) { return 4 }
+  if ($ComboCount -ge 14) { return 3 }
+  if ($ComboCount -ge 6) { return 2 }
+  return 1
+}
+
+function Update-KeyComboState {
+  param([int]$Delta)
+  $now = Get-Date
+  $idleSeconds = if ($script:LastKeyInputAt -eq [datetime]::MinValue) { 99999.0 } else { ($now - $script:LastKeyInputAt).TotalSeconds }
+  $rested = (
+    $idleSeconds -ge 45.0 -and
+    $idleSeconds -le 900.0 -and
+    [int]$script:KeyComboCount -ge 12 -and
+    ($now - $script:LastKeyRestBonusAt).TotalSeconds -ge 60.0
+  )
+
+  if ($idleSeconds -gt 3.2) {
+    $script:KeyComboCount = [Math]::Max(1, [int]$Delta)
+  } else {
+    $script:KeyComboCount = [Math]::Min(120, [int]$script:KeyComboCount + [Math]::Max(1, [int]$Delta))
+  }
+
+  if ($rested) {
+    $script:LastKeyRestBonusAt = $now
+    $script:KeyFlowState = "Rest +"
+    $script:KeyFlowStateUntil = $now.AddSeconds(7)
+    $script:KeyComboMultiplier = [Math]::Max(2, [int]$script:KeyComboMultiplier)
+  } else {
+    $script:KeyComboMultiplier = Get-KeyComboMultiplier -ComboCount ([int]$script:KeyComboCount)
+    if ([int]$script:KeyComboCount -ge 70) {
+      $script:KeyFlowState = "Cooldown"
+      $script:KeyFlowStateUntil = $now.AddSeconds(7)
+    }
+  }
+
+  $script:LastKeyInputAt = $now
+}
+
+function Update-KeyCounterVisualText {
+  if ($null -ne $script:KeyCounterLabel) {
+    $status = Get-KeyCounterStatusText
+    $script:KeyCounterLabel.Inlines.Clear()
+    $countRun = [System.Windows.Documents.Run]::new(("{0}" -f ([int]$script:KeyPressCount)))
+    $countRun.FontSize = 20.0
+    $countRun.FontWeight = [System.Windows.FontWeights]::Black
+    $script:KeyCounterLabel.Inlines.Add($countRun) | Out-Null
+    if (-not [string]::IsNullOrWhiteSpace($status)) {
+      $script:KeyCounterLabel.Inlines.Add([System.Windows.Documents.LineBreak]::new()) | Out-Null
+      $statusRun = [System.Windows.Documents.Run]::new($status)
+      $statusRun.FontSize = 13.2
+      $statusRun.FontWeight = [System.Windows.FontWeights]::Bold
+      $script:KeyCounterLabel.Inlines.Add($statusRun) | Out-Null
+    }
+  }
+  if ($null -ne $script:KeyCounterBackground) {
+    $combo = [int]$script:KeyComboMultiplier
+    if ([string](Get-KeyCounterStatusText) -eq "Rest +") {
+      $script:KeyCounterBackground.Stroke = New-StyleBrush ([byte]$script:Style.SecondaryOpacity) ([int[]]$script:Style.SecondaryRgb)
+      $script:KeyCounterBackground.StrokeThickness = 1.8
+    } elseif ($combo -ge 4) {
+      $script:KeyCounterBackground.Stroke = New-StyleBrush ([byte]$script:Style.WarningOpacity) ([int[]]$script:Style.CautionRgb)
+      $script:KeyCounterBackground.StrokeThickness = 1.7
+    } elseif ($combo -ge 2) {
+      $script:KeyCounterBackground.Stroke = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+      $script:KeyCounterBackground.StrokeThickness = 1.4
+    } else {
+      $script:KeyCounterBackground.Stroke = New-StyleBrush ([byte][Math]::Max(24, [Math]::Min(255, [int]$script:Style.TrackOpacity + 42))) ([int[]]$script:Style.TrackRgb)
+      $script:KeyCounterBackground.StrokeThickness = 1.0
+    }
+  }
+}
+
+function Sync-KeyCounterIdleVisualState {
+  if (-not (Test-KeyCounterHudVisible)) { return }
+  $now = Get-Date
+  if (($now - $script:LastKeyCounterIdleSyncAt).TotalMilliseconds -lt 250) { return }
+  $script:LastKeyCounterIdleSyncAt = $now
+  $signature = "{0}|{1}|{2}" -f (([string]([int]$script:KeyPressCount)).Length), (Get-KeyCounterStatusText), ([string]$script:Style.DisplayMode)
+  if ($signature -ne [string]$script:LastKeyCounterVisualSignature) {
+    $script:LastKeyCounterVisualSignature = $signature
+    Update-KeyCounterGeometry
+    Update-KeyCounterVisualText
+  }
+}
+
+function Update-KeyCounterHook {
+  $shouldInstall = (Test-KeyCounterHudVisible) -and $null -ne $script:LastPetRect
+  if ($shouldInstall -and -not $script:KeyCounterInstalled) {
+    $now = Get-Date
+    if (($now - $script:LastKeyHookAttemptAt).TotalSeconds -lt 10) { return }
+    $script:LastKeyHookAttemptAt = $now
+    try {
+      $script:KeyCounterInstalled = [bool][CodexPetLimitRingNative]::InstallKeyboardCounter()
+      if ($script:KeyCounterInstalled) {
+        $script:KeyHookFailureLogged = $false
+      } elseif (-not $script:KeyHookFailureLogged) {
+        Write-AppLog "Keyboard counter hook could not be installed."
+        $script:KeyHookFailureLogged = $true
+      }
+    } catch {
+      $script:KeyCounterInstalled = $false
+      if (-not $script:KeyHookFailureLogged) {
+        Write-AppLog "Keyboard counter hook install failed: $($_.Exception.Message)"
+        $script:KeyHookFailureLogged = $true
+      }
+    }
+  } elseif (-not $shouldInstall -and $script:KeyCounterInstalled) {
+    try { [CodexPetLimitRingNative]::UninstallKeyboardCounter() } catch {}
+    $script:KeyCounterInstalled = $false
+  }
+}
+
+function Update-MouseClickHook {
+  $shouldInstall = (Test-InventoryHudVisible) -and $null -ne $script:LastPetRect
+  if ($shouldInstall -and -not $script:MouseClickCounterInstalled) {
+    $now = Get-Date
+    if (($now - $script:LastMouseHookAttemptAt).TotalSeconds -lt 10) { return }
+    $script:LastMouseHookAttemptAt = $now
+    try {
+      $script:MouseClickCounterInstalled = [bool][CodexPetLimitRingNative]::InstallMouseClickCounter()
+      if ($script:MouseClickCounterInstalled) {
+        $script:MouseHookFailureLogged = $false
+      } elseif (-not $script:MouseHookFailureLogged) {
+        Write-AppLog "Mouse click hook could not be installed."
+        $script:MouseHookFailureLogged = $true
+      }
+    } catch {
+      $script:MouseClickCounterInstalled = $false
+      if (-not $script:MouseHookFailureLogged) {
+        Write-AppLog "Mouse click hook install failed: $($_.Exception.Message)"
+        $script:MouseHookFailureLogged = $true
+      }
+    }
+  } elseif (-not $shouldInstall -and $script:MouseClickCounterInstalled) {
+    try { [CodexPetLimitRingNative]::UninstallMouseClickCounter() } catch {}
+    $script:MouseClickCounterInstalled = $false
+  }
+}
+
+function Get-ConsumedLeftMouseClickCursor {
+  try {
+    $raw = [string][CodexPetLimitRingNative]::ConsumeLeftMouseClick()
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+    $parts = $raw.Split(",")
+    if ($parts.Count -lt 2) { return $null }
+    return [pscustomobject]@{
+      X = [double]([int]$parts[0])
+      Y = [double]([int]$parts[1])
+    }
+  } catch {
+    return $null
+  }
+}
+
+function Invoke-InventoryToggle {
+  param([double]$LocalX, [double]$LocalY)
+  $now = Get-Date
+  if (($now - $script:LastInventoryToggleAt).TotalMilliseconds -lt 140) { return }
+  $script:LastInventoryToggleAt = $now
+  $script:InventoryMouseWasDown = $true
+  $script:LastHoverSignature = "InventoryClick|{0:N0}|{1:N0}" -f $LocalX, $LocalY
+  Toggle-InventoryReadout
+}
+
+function Get-KeyMilestoneTier {
+  param([int]$OldCount, [int]$NewCount)
+  if ($NewCount -le $OldCount) { return 0 }
+
+  $tier = 0
+  $unit = 100
+  while ($unit -le 1000000) {
+    if ([Math]::Floor($NewCount / $unit) -gt [Math]::Floor($OldCount / $unit)) {
+      $tier += 1
+    }
+    if ($unit -gt 100000) { break }
+    $unit *= 10
+  }
+  return $tier
+}
+
+function New-KeyBurstParticle {
+  param([double]$X, [double]$Y, [int]$Index, [int]$Tier = 0, [string]$MilestoneText = "")
+  if ($null -eq $script:Canvas -or -not $script:Style.ShowKeyEffects) { return }
+  if ($script:Canvas.Children.Count -gt 64) { return }
+
+  $scale = 1.0 + ([Math]::Max(0, $Tier) * 0.55)
+  $particle = if ($Index % 4 -eq 0 -or -not [string]::IsNullOrWhiteSpace($MilestoneText)) {
+    $text = [System.Windows.Controls.TextBlock]::new()
+    $text.Text = if ([string]::IsNullOrWhiteSpace($MilestoneText)) { "+1" } else { $MilestoneText }
+    $text.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+    $text.FontWeight = [System.Windows.FontWeights]::Black
+    $text.FontSize = 11.0 * $scale
+    $text.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+    $text
+  } else {
+    $dot = [System.Windows.Shapes.Ellipse]::new()
+    $dot.Width = 7.0 * $scale
+    $dot.Height = 7.0 * $scale
+    $dot.Fill = if ($Index % 3 -eq 0) {
+      New-StyleBrush ([byte]$script:Style.SecondaryOpacity) ([int[]]$script:Style.SecondaryRgb)
+    } elseif ($Tier -gt 1) {
+      New-StyleBrush ([byte]$script:Style.WarningOpacity) ([int[]]$script:Style.CautionRgb)
+    } else {
+      New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+    }
+    $dot
+  }
+
+  $spread = 110.0 + ([Math]::Max(0, $Tier) * 34.0)
+  $angle = ((-$spread / 2.0) + (($Index * 37) % [Math]::Max(1, [int]$spread))) * [Math]::PI / 180.0
+  $distance = 15.0 + (($Index * 5) % 15) + ([Math]::Max(0, $Tier) * 18.0)
+  $fromLeft = $X
+  $fromTop = $Y
+  $toLeft = $X + [Math]::Cos($angle) * $distance
+  $toTop = $Y + [Math]::Sin($angle) * $distance - (10.0 + ([Math]::Max(0, $Tier) * 12.0))
+  [System.Windows.Controls.Canvas]::SetLeft($particle, $fromLeft)
+  [System.Windows.Controls.Canvas]::SetTop($particle, $fromTop)
+  $particle.Opacity = 0.95
+  $script:Canvas.Children.Add($particle) | Out-Null
+
+  $duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(430 + ([Math]::Max(0, $Tier) * 130)))
+  $ease = [System.Windows.Media.Animation.CubicEase]::new()
+  $ease.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseOut
+  $leftAnimation = [System.Windows.Media.Animation.DoubleAnimation]::new($fromLeft, $toLeft, $duration)
+  $topAnimation = [System.Windows.Media.Animation.DoubleAnimation]::new($fromTop, $toTop, $duration)
+  $opacityAnimation = [System.Windows.Media.Animation.DoubleAnimation]::new(0.95, 0.0, $duration)
+  $leftAnimation.EasingFunction = $ease
+  $topAnimation.EasingFunction = $ease
+  $opacityAnimation.EasingFunction = $ease
+  $opacityAnimation.Add_Completed({
+    try { [void]$script:Canvas.Children.Remove($particle) } catch {}
+  }.GetNewClosure())
+  $particle.BeginAnimation([System.Windows.Controls.Canvas]::LeftProperty, $leftAnimation)
+  $particle.BeginAnimation([System.Windows.Controls.Canvas]::TopProperty, $topAnimation)
+  $particle.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $opacityAnimation)
+}
+
+function Start-KeyBurstEffect {
+  param([int]$Count, [int]$Tier = 0, [string]$MilestoneText = "")
+  if (
+    -not $script:Style.ShowKeyEffects -or
+    -not $script:RingVisualsVisible -or
+    $null -eq $script:KeyCounterBounds
+  ) {
+    return
+  }
+
+  $now = Get-Date
+  if (($now - $script:LastKeyBurstAt).TotalMilliseconds -lt 18) { return }
+  $script:LastKeyBurstAt = $now
+  $tierValue = [Math]::Max(0, [int]$Tier)
+  $particleLimit = if ($tierValue -le 0) { 4 } elseif ($tierValue -eq 1) { 10 } elseif ($tierValue -eq 2) { 16 } else { 22 }
+  $particles = [Math]::Min($particleLimit, [Math]::Max(1, [int]$Count) + ($tierValue * 4))
+  $x = [double]$script:KeyCounterBounds.X + [double]$script:KeyCounterBounds.Width / 2.0
+  $y = [double]$script:KeyCounterBounds.Y + 4.0
+  if ($Tier -gt 0) {
+    New-KeyBurstParticle -X $x -Y $y -Index $script:KeyPressCount -Tier $Tier -MilestoneText $MilestoneText
+  }
+  for ($i = 0; $i -lt $particles; $i++) {
+    New-KeyBurstParticle -X $x -Y $y -Index ($script:KeyPressCount + $i) -Tier $Tier
+  }
+}
+
+function Start-KeyCounterPulse {
+  param([int]$Tier = 0)
+  if ($null -eq $script:KeyCounterLabel -or -not $script:RingVisualsVisible) { return }
+  $tierValue = [Math]::Max(0, [int]$Tier)
+  $peakScale = [Math]::Min(1.34, 1.13 + ($tierValue * 0.05))
+  $duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(92 + ($tierValue * 18)))
+  $backDuration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(145 + ($tierValue * 20)))
+  $growX = [System.Windows.Media.Animation.DoubleAnimation]::new(1.0, $peakScale, $duration)
+  $growY = [System.Windows.Media.Animation.DoubleAnimation]::new(1.0, $peakScale, $duration)
+  $shrinkX = [System.Windows.Media.Animation.DoubleAnimation]::new($peakScale, 1.0, $backDuration)
+  $shrinkY = [System.Windows.Media.Animation.DoubleAnimation]::new($peakScale, 1.0, $backDuration)
+  $easeOut = [System.Windows.Media.Animation.CubicEase]::new()
+  $easeOut.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseOut
+  foreach ($animation in @($growX, $growY, $shrinkX, $shrinkY)) {
+    $animation.EasingFunction = $easeOut
+  }
+  $growX.Add_Completed({
+    try {
+      $scale = $script:KeyCounterLabel.RenderTransform
+      if ($null -ne $scale) {
+        $scale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $shrinkX)
+        $scale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $shrinkY)
+      }
+    } catch {}
+  }.GetNewClosure())
+  try {
+    $scale = $script:KeyCounterLabel.RenderTransform
+    if ($null -ne $scale) {
+      $scale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $growX)
+      $scale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $growY)
+    }
+  } catch {}
+
+  if ($null -ne $script:KeyCounterAccent -and $null -ne $script:KeyCounterBounds) {
+    try {
+      $barHeight = if ($tierValue -gt 1) { 4.0 } else { 3.0 }
+      $x = [double]$script:KeyCounterBounds.X + 7.0
+      $y = [double]$script:KeyCounterBounds.Y + [double]$script:KeyCounterBounds.Height - ($barHeight + 4.0)
+      $width = [Math]::Max(8.0, [double]$script:KeyCounterBounds.Width - 14.0)
+      Set-RectangleBounds $script:KeyCounterAccent $x $y 0.0 $barHeight
+      $script:KeyCounterAccent.Opacity = 0.95
+      $script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Visible
+
+      $flashDuration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(120 + ($tierValue * 20)))
+      $fadeDuration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(165 + ($tierValue * 25)))
+      $widthAnimation = [System.Windows.Media.Animation.DoubleAnimation]::new(0.0, $width, $flashDuration)
+      $fadeAnimation = [System.Windows.Media.Animation.DoubleAnimation]::new(0.95, 0.0, $fadeDuration)
+      $ease = [System.Windows.Media.Animation.CubicEase]::new()
+      $ease.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseOut
+      $widthAnimation.EasingFunction = $ease
+      $fadeAnimation.EasingFunction = $ease
+      $fadeAnimation.Add_Completed({
+        try { $script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Collapsed } catch {}
+      }.GetNewClosure())
+      $script:KeyCounterAccent.BeginAnimation([System.Windows.FrameworkElement]::WidthProperty, $widthAnimation)
+      $script:KeyCounterAccent.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fadeAnimation)
+    } catch {}
+  }
+}
+
+function Update-KeyCounterGeometry {
+  if ($null -eq $script:Window -or $null -eq $script:LastPetRect) {
+    $script:KeyCounterBounds = $null
+    return
+  }
+  if ($null -eq $script:KeyCounterBackground -or $null -eq $script:KeyCounterLabel) { return }
+
+  $mode = [string]$script:Style.DisplayMode
+  $chipWidth = Get-KeyCounterChipWidth -Mode $mode
+  $hasStatus = -not [string]::IsNullOrWhiteSpace((Get-KeyCounterStatusText))
+  $chipHeight = if ($hasStatus) {
+    if ($mode -eq "badge") { 44.0 } else { 48.0 }
+  } elseif ($mode -eq "badge") {
+    32.0
+  } else {
+    38.0
+  }
+  $center = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX } else { [double]$script:Window.Width / 2.0 }
+  $ringSize = if ($null -ne $script:HudRingSize) { [double]$script:HudRingSize } else { [Math]::Min([double]$script:Window.Width, [double]$script:Window.Height) }
+  $pet = $script:LastPetRect
+  $petTop = [double]$pet.Y - [double]$script:Window.Top
+  $petBottom = $petTop + [double]$pet.Height
+  $growthVisible = Test-GrowthHudVisible
+  $growthWidth = if ($growthVisible) { 86.0 } else { 0.0 }
+  $gap = if ($growthVisible) { 6.0 } else { 0.0 }
+  $inventoryVisible = Test-InventoryHudVisible
+  $inventoryWidth = if ($inventoryVisible) { Get-InventoryHudWidth } else { 0.0 }
+  $inventoryGap = if ($inventoryVisible) { 6.0 } else { 0.0 }
+  if ($mode -eq "ring") {
+    $targetX = $center - (($growthWidth + $gap + $chipWidth + $inventoryGap + $inventoryWidth) / 2.0) + $growthWidth + $gap
+    $targetY = $ringSize + 6.0
+  } elseif ($mode -eq "badge") {
+    $badgeWidth = Get-BadgeHudWidth
+    $badgeX = $center - $badgeWidth / 2.0
+    $slotGap = 4.0
+    $slotWidth = ($badgeWidth - 12.0 - ($slotGap * 2.0)) / 3.0
+    $targetX = $badgeX + 6.0 + (($slotWidth + $slotGap) * 2.0)
+    $targetY = $petBottom + 12.0
+    $chipWidth = $slotWidth
+  } else {
+    $targetX = $center - (($growthWidth + $gap + $chipWidth + $inventoryGap + $inventoryWidth) / 2.0) + $growthWidth + $gap
+    $targetY = $petBottom + $(if ($mode -eq "battery") { 12.0 } else { 8.0 })
+  }
+  $x = [Math]::Max(4.0, [Math]::Min($targetX, [double]$script:Window.Width - $chipWidth - 4.0))
+  $y = [Math]::Max(4.0, [Math]::Min($targetY, [double]$script:Window.Height - $chipHeight - 4.0))
+
+  Set-RectangleBounds $script:KeyCounterBackground $x $y $chipWidth $chipHeight
+  if ($null -ne $script:KeyCounterAccent) {
+    Set-RectangleBounds $script:KeyCounterAccent $x $y 0.0 0.0
+  }
+  $script:KeyCounterLabel.Width = $chipWidth
+  $script:KeyCounterLabel.Height = $chipHeight
+  [System.Windows.Controls.Canvas]::SetLeft($script:KeyCounterLabel, $x)
+  $script:KeyCounterLabel.LineHeight = if ($hasStatus) { 16.6 } else { [Math]::Max(20.0, $chipHeight - 2.0) }
+  $labelTopOffset = if ($hasStatus) { [Math]::Max(3.0, ($chipHeight - ([double]$script:KeyCounterLabel.LineHeight * 2.0)) / 2.0) } else { 0.0 }
+  [System.Windows.Controls.Canvas]::SetTop($script:KeyCounterLabel, $y + $labelTopOffset)
+  $script:KeyCounterBounds = [pscustomobject]@{ X = $x; Y = $y; Width = $chipWidth; Height = $chipHeight }
+  $script:KeyCounterBackground.RadiusX = if ($mode -eq "badge") { 9.0 } else { 8.0 }
+  $script:KeyCounterBackground.RadiusY = $script:KeyCounterBackground.RadiusX
+  $script:KeyCounterBackground.StrokeThickness = 1.0
+  Update-KeyCounterVisualText
+  Update-ModeShapeVisibility
+}
+
+function Update-InventoryGeometry {
+  if (
+    -not (Test-InventoryHudVisible) -or
+    $null -eq $script:Window -or
+    $null -eq $script:InventoryIcon -or
+    $null -eq $script:InventoryCountBackground -or
+    $null -eq $script:InventoryLabel -or
+    $null -eq $script:KeyCounterBounds
+  ) {
+    $script:InventoryBounds = $null
+    $script:InventoryHitBounds = $null
+    Set-InventoryHoverHighlight -Visible $false
+    return
+  }
+
+  $chipWidth = Get-InventoryHudWidth
+  $chipHeight = 42.0
+  $keyBounds = $script:KeyCounterBounds
+  $targetX = [double]$keyBounds.X + [double]$keyBounds.Width + 6.0
+  $targetY = [double]$keyBounds.Y + [Math]::Max(0.0, ([double]$keyBounds.Height - $chipHeight) / 2.0)
+  $x = [Math]::Max(4.0, [Math]::Min($targetX, [double]$script:Window.Width - $chipWidth - 4.0))
+  $y = [Math]::Max(4.0, [Math]::Min($targetY, [double]$script:Window.Height - $chipHeight - 4.0))
+  if ($null -ne $script:InventoryBackground) {
+    $script:InventoryBackground.Visibility = [System.Windows.Visibility]::Collapsed
+    Set-RectangleBounds $script:InventoryBackground 0.0 0.0 0.0 0.0
+  }
+  $iconX = $x + 3.0
+  $iconY = $y
+  $iconSize = 40.0
+  $badgeX = $x + 28.0
+  $badgeY = $y + 27.0
+  $badgeWidth = 17.0
+  $badgeHeight = 13.0
+  $script:InventoryIcon.Width = $iconSize
+  $script:InventoryIcon.Height = $iconSize
+  [System.Windows.Controls.Canvas]::SetLeft($script:InventoryIcon, $iconX)
+  [System.Windows.Controls.Canvas]::SetTop($script:InventoryIcon, $iconY)
+  Set-RectangleBounds $script:InventoryCountBackground $badgeX $badgeY $badgeWidth $badgeHeight
+  $script:InventoryLabel.Text = Get-InventoryHudText
+  $script:InventoryLabel.Width = $badgeWidth
+  $script:InventoryLabel.Height = $badgeHeight
+  [System.Windows.Controls.Canvas]::SetLeft($script:InventoryLabel, $badgeX)
+  [System.Windows.Controls.Canvas]::SetTop($script:InventoryLabel, $badgeY - 2.0)
+  $script:InventoryBounds = [pscustomobject]@{ X = $x; Y = $y; Width = $chipWidth; Height = $chipHeight }
+  $script:InventoryHitBounds = [pscustomobject]@{ X = ($iconX - 2.0); Y = ($iconY - 2.0); Width = 46.0; Height = 44.0 }
+  Set-InventoryHoverHighlight -Visible (Test-InventoryReadoutOpen)
+  Update-ModeShapeVisibility
+}
+
+function Update-KeyCounter {
+  Update-KeyCounterHook
+  if (-not $script:KeyCounterInstalled) { return }
+  $delta = 0
+  try { $delta = [int][CodexPetLimitRingNative]::ConsumeKeyPresses() } catch { return }
+  if (-not (Test-KeyCounterHudVisible)) { return }
+  if ($delta -le 0) {
+    Sync-KeyCounterIdleVisualState
+    return
+  }
+  $oldCount = [int]$script:KeyPressCount
+  $oldDigits = ([string]$oldCount).Length
+  $oldVisualSignature = [string]$script:LastKeyCounterVisualSignature
+  Update-KeyComboState -Delta $delta
+  $script:KeyPressCount += $delta
+  $newDigits = ([string]([int]$script:KeyPressCount)).Length
+  $tier = Get-KeyMilestoneTier -OldCount $oldCount -NewCount ([int]$script:KeyPressCount)
+  $comboTier = [Math]::Max(0, [int]$script:KeyComboMultiplier - 1)
+  $effectTier = [Math]::Max([int]$tier, [Math]::Min(2, $comboTier))
+  $dropItem = Add-InventoryDrop -Delta $delta
+  $dropText = Get-DropItemLabel -Item ([string]$dropItem)
+  $milestoneText = if (-not [string]::IsNullOrWhiteSpace($dropText)) {
+    "+ {0}" -f $dropText
+  } elseif ($tier -gt 0) {
+    "{0}" -f ([int]$script:KeyPressCount)
+  } else { "" }
+  $newVisualSignature = "{0}|{1}|{2}" -f $newDigits, (Get-KeyCounterStatusText), ([string]$script:Style.DisplayMode)
+  if ($newDigits -ne $oldDigits -or $newDigits -ne [int]$script:LastKeyCounterDigits -or $newVisualSignature -ne $oldVisualSignature) {
+    $script:LastKeyCounterDigits = $newDigits
+    $script:LastKeyCounterVisualSignature = $newVisualSignature
+    Update-KeyCounterGeometry
+  }
+  Update-KeyCounterVisualText
+  Update-InventoryGeometry
+  Start-KeyCounterPulse -Tier $effectTier
+  if ($script:RingVisualsVisible) {
+    Start-KeyBurstEffect -Count $delta -Tier $effectTier -MilestoneText $milestoneText
+  }
 }
 
 function Update-PetGrowth {
@@ -1556,10 +2722,19 @@ function Hide-PetHud {
   $script:BadgePrimaryBounds = $null
   $script:BadgeSecondaryBounds = $null
   $script:GrowthChipBounds = $null
+  $script:KeyCounterBounds = $null
+  $script:InventoryBounds = $null
+  $script:InventoryHitBounds = $null
+  Set-InventoryHoverHighlight -Visible $false
+  $script:HudCenterX = $null
+  $script:HudRingSize = $null
   $script:LastHoverSignature = ""
   $script:RingVisualsVisible = $false
   $script:RingAnimationToken += 1
+  Update-KeyCounterHook
+  Update-MouseClickHook
 
+  Hide-InventoryReadout -ResetPinned
   Hide-RingReadouts
   Set-RingShapesVisibility -Visibility ([System.Windows.Visibility]::Collapsed)
   if ($null -ne $script:Window) {
@@ -1578,14 +2753,22 @@ function Update-GrowthChipGeometry {
   }
   if ($null -eq $script:GrowthChipBackground -or $null -eq $script:GrowthChipLabel) { return }
 
-  $chipWidth = 86.0
-  $chipHeight = 24.0
+  $chipWidth = Get-GrowthChipWidth
+  $chipHeight = 26.0
   $pet = $script:LastPetRect
   $petLeft = [double]$pet.X - [double]$script:Window.Left
   $petTop = [double]$pet.Y - [double]$script:Window.Top
   $petBottom = $petTop + [double]$pet.Height
   $mode = [string]$script:Style.DisplayMode
-  $targetX = ([double]$script:Window.Width - $chipWidth) / 2.0
+  $center = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX } else { [double]$script:Window.Width / 2.0 }
+  $keyVisible = Test-KeyCounterHudVisible
+  $keyWidth = if ($keyVisible -and $mode -ne "badge") { Get-KeyCounterChipWidth -Mode $mode } else { 0.0 }
+  $rowGap = if ($keyVisible -and $mode -ne "badge") { 6.0 } else { 0.0 }
+  $targetX = if ($keyVisible) {
+    $center - (($chipWidth + $rowGap + $keyWidth) / 2.0)
+  } else {
+    $center - ($chipWidth / 2.0)
+  }
   $targetY = if ($mode -eq "ring") {
     $ringBottom = if ($null -ne $script:RingOuterRadius) {
       ([double]$script:RingOuterRadius + 16.0) * 2.0
@@ -1602,11 +2785,11 @@ function Update-GrowthChipGeometry {
   $y = [Math]::Max(4.0, [Math]::Min($targetY, [double]$script:Window.Height - $chipHeight - 4.0))
 
   Set-RectangleBounds $script:GrowthChipBackground $x $y $chipWidth $chipHeight
-  Set-RectangleBounds $script:GrowthChipAccent ($x + 5.0) ($y + 6.0) 5.0 ($chipHeight - 12.0)
-  $script:GrowthChipLabel.Width = $chipWidth - 18.0
+  Set-RectangleBounds $script:GrowthChipAccent ($x + 7.0) ($y + 6.0) 5.0 ($chipHeight - 12.0)
+  $script:GrowthChipLabel.Width = $chipWidth - 24.0
   $script:GrowthChipLabel.Height = $chipHeight
-  [System.Windows.Controls.Canvas]::SetLeft($script:GrowthChipLabel, $x + 14.0)
-  [System.Windows.Controls.Canvas]::SetTop($script:GrowthChipLabel, $y + 4.0)
+  [System.Windows.Controls.Canvas]::SetLeft($script:GrowthChipLabel, $x + 18.0)
+  [System.Windows.Controls.Canvas]::SetTop($script:GrowthChipLabel, $y + 5.0)
   $script:GrowthChipBounds = [pscustomobject]@{ X = $x; Y = $y; Width = $chipWidth; Height = $chipHeight }
   Update-PetGrowthVisualText
   Update-ModeShapeVisibility
@@ -1619,8 +2802,7 @@ function Test-CursorInGrowthChipRange {
     $null -eq $Cursor -or
     $null -eq $script:GrowthChipBounds -or
     -not $script:Window.IsVisible -or
-    -not $script:Style.GamificationEnabled -or
-    -not $script:Style.ShowGrowthChip
+    -not (Test-GrowthHudVisible)
   ) {
     return $false
   }
@@ -1637,9 +2819,58 @@ function Test-CursorInGrowthChipRange {
   )
 }
 
+function Test-CursorInKeyCounterRange {
+  param($Cursor)
+  if (
+    $null -eq $script:Window -or
+    $null -eq $Cursor -or
+    $null -eq $script:KeyCounterBounds -or
+    -not $script:Window.IsVisible -or
+    -not (Test-KeyCounterHudVisible)
+  ) {
+    return $false
+  }
+
+  $localX = [double]$Cursor.X - [double]$script:Window.Left
+  $localY = [double]$Cursor.Y - [double]$script:Window.Top
+  $padding = [Math]::Max(7.0, [Math]::Min(20.0, [double]$script:Style.HoverRange))
+  $bounds = $script:KeyCounterBounds
+  return (
+    $localX -ge ([double]$bounds.X - $padding) -and
+    $localX -le ([double]$bounds.X + [double]$bounds.Width + $padding) -and
+    $localY -ge ([double]$bounds.Y - $padding) -and
+    $localY -le ([double]$bounds.Y + [double]$bounds.Height + $padding)
+  )
+}
+
+function Test-CursorInInventoryRange {
+  param($Cursor)
+  if (
+    $null -eq $script:Window -or
+    $null -eq $Cursor -or
+    $null -eq $script:InventoryHitBounds -or
+    -not $script:Window.IsVisible -or
+    -not (Test-InventoryHudVisible)
+  ) {
+    return $false
+  }
+
+  $localX = [double]$Cursor.X - [double]$script:Window.Left
+  $localY = [double]$Cursor.Y - [double]$script:Window.Top
+  $padding = 3.0
+  $bounds = $script:InventoryHitBounds
+  return (
+    $localX -ge ([double]$bounds.X - $padding) -and
+    $localX -le ([double]$bounds.X + [double]$bounds.Width + $padding) -and
+    $localY -ge ([double]$bounds.Y - $padding) -and
+    $localY -le ([double]$bounds.Y + [double]$bounds.Height + $padding)
+  )
+}
+
 function Show-GrowthReadout {
   if (
     -not $script:Style.ShowGrowthHoverReadout -or
+    -not (Test-GrowthHudVisible) -or
     $null -eq $script:GrowthChipBounds -or
     $null -eq $script:GrowthReadoutWindow
   ) {
@@ -1651,14 +2882,55 @@ function Show-GrowthReadout {
   if ($null -ne $script:InnerReadoutWindow -and $script:InnerReadoutWindow.IsVisible) {
     $script:InnerReadoutWindow.Hide()
   }
+  if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+    Hide-InventoryReadout -ResetPinned
+  }
   $script:OuterReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
   $script:InnerReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+  $script:InventoryReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
   $script:GrowthReadoutBorder.Visibility = [System.Windows.Visibility]::Visible
   [void](Update-ReadoutText -Force)
   $screenX = [double]$script:Window.Left + [double]$script:GrowthChipBounds.X + [double]$script:GrowthChipBounds.Width / 2.0
   $screenY = [double]$script:Window.Top + [double]$script:GrowthChipBounds.Y + [double]$script:GrowthChipBounds.Height / 2.0
   Set-ReadoutWindowNearPoint -Window $script:GrowthReadoutWindow -Border $script:GrowthReadoutBorder -ScreenX $screenX -ScreenY $screenY
   if (-not $script:GrowthReadoutWindow.IsVisible) { $script:GrowthReadoutWindow.Show() }
+}
+
+function Show-InventoryReadout {
+  if (
+    -not (Test-InventoryHudVisible) -or
+    $null -eq $script:InventoryHitBounds -or
+    $null -eq $script:InventoryReadoutWindow
+  ) {
+    return
+  }
+  if ($null -ne $script:OuterReadoutWindow -and $script:OuterReadoutWindow.IsVisible) {
+    $script:OuterReadoutWindow.Hide()
+  }
+  if ($null -ne $script:InnerReadoutWindow -and $script:InnerReadoutWindow.IsVisible) {
+    $script:InnerReadoutWindow.Hide()
+  }
+  if ($null -ne $script:GrowthReadoutWindow -and $script:GrowthReadoutWindow.IsVisible) {
+    $script:GrowthReadoutWindow.Hide()
+  }
+  $script:OuterReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+  $script:InnerReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+  $script:GrowthReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+  $script:InventoryReadoutBorder.Visibility = [System.Windows.Visibility]::Visible
+  $script:InventoryReadoutPinned = $true
+  [void](Update-ReadoutText -Force)
+  $screenX = [double]$script:Window.Left + [double]$script:InventoryHitBounds.X + [double]$script:InventoryHitBounds.Width / 2.0
+  $screenY = [double]$script:Window.Top + [double]$script:InventoryHitBounds.Y + [double]$script:InventoryHitBounds.Height / 2.0
+  Set-ReadoutWindowNearPoint -Window $script:InventoryReadoutWindow -Border $script:InventoryReadoutBorder -ScreenX $screenX -ScreenY $screenY
+  if (-not $script:InventoryReadoutWindow.IsVisible) { $script:InventoryReadoutWindow.Show() }
+}
+
+function Toggle-InventoryReadout {
+  if (Test-InventoryReadoutOpen) {
+    Hide-InventoryReadout -ResetPinned
+    return
+  }
+  Show-InventoryReadout
 }
 
 function Start-RingOpacityAnimation {
@@ -1773,12 +3045,14 @@ function Test-CursorInRingRange {
       [double]$Cursor.Y -le ([double]$script:Window.Top + [double]$script:Window.Height + $range)
     )
   }
-  $centerX = [double]$script:Window.Left + $size / 2.0
-  $centerY = [double]$script:Window.Top + $size / 2.0
+  $centerLocalX = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX } else { $size / 2.0 }
+  $ringSize = if ($null -ne $script:HudRingSize) { [double]$script:HudRingSize } else { $size }
+  $centerX = [double]$script:Window.Left + $centerLocalX
+  $centerY = [double]$script:Window.Top + $ringSize / 2.0
   $outerRadius = if ($null -ne $script:RingOuterRadius) {
     [double]$script:RingOuterRadius
   } else {
-    $size / 2.0 - 16.0
+    $ringSize / 2.0 - 16.0
   }
   $range = [Math]::Max(0.0, [double]$script:Style.HoverRange)
   $distance = [Math]::Sqrt([Math]::Pow([double]$Cursor.X - $centerX, 2) + [Math]::Pow([double]$Cursor.Y - $centerY, 2))
@@ -1852,15 +3126,16 @@ function Update-RingHoverVisibility {
   }
 
   $cursor = [System.Windows.Forms.Cursor]::Position
+  $inventoryOpen = Test-InventoryReadoutOpen
   if ($script:Style.DisplayMode -eq "battery") {
-    $showRing = (Test-CursorOverPet -Cursor $cursor) -or (Test-CursorInBatteryRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor)
+    $showRing = $inventoryOpen -or (Test-CursorOverPet -Cursor $cursor) -or (Test-CursorInBatteryRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor) -or (Test-CursorInKeyCounterRange -Cursor $cursor) -or (Test-CursorInInventoryRange -Cursor $cursor)
   } elseif ($script:Style.DisplayMode -eq "badge") {
-    $showRing = (Test-CursorOverPet -Cursor $cursor) -or (Test-CursorInBadgeRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor)
+    $showRing = $inventoryOpen -or (Test-CursorOverPet -Cursor $cursor) -or (Test-CursorInBadgeRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor) -or (Test-CursorInKeyCounterRange -Cursor $cursor) -or (Test-CursorInInventoryRange -Cursor $cursor)
   } else {
-    $showRing = (Test-CursorOverPet -Cursor $cursor) -or ($script:Window.IsVisible -and ((Test-CursorInRingRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor)))
+    $showRing = $inventoryOpen -or (Test-CursorOverPet -Cursor $cursor) -or ($script:Window.IsVisible -and ((Test-CursorInRingRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor) -or (Test-CursorInKeyCounterRange -Cursor $cursor) -or (Test-CursorInInventoryRange -Cursor $cursor)))
   }
   Set-RingVisualsVisible -Visible $showRing
-  Set-FrameTimerInterval -Fast $true
+  Set-FrameTimerInterval -Fast $showRing
 }
 
 function Test-RectOverlap {
@@ -1939,6 +3214,9 @@ function Show-RingReadout {
     if ($null -ne $script:InnerReadoutWindow -and $script:InnerReadoutWindow.IsVisible) {
       $script:InnerReadoutWindow.Hide()
     }
+    if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+      Hide-InventoryReadout -ResetPinned
+    }
     $script:InnerReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
     $script:OuterReadoutBorder.Visibility = [System.Windows.Visibility]::Visible
     Set-ReadoutWindowNearPoint -Window $script:OuterReadoutWindow -Border $script:OuterReadoutBorder -ScreenX $screenX -ScreenY $screenY
@@ -1948,6 +3226,9 @@ function Show-RingReadout {
 
   if ($null -ne $script:OuterReadoutWindow -and $script:OuterReadoutWindow.IsVisible) {
     $script:OuterReadoutWindow.Hide()
+  }
+  if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+    Hide-InventoryReadout -ResetPinned
   }
   $script:OuterReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
   $script:InnerReadoutBorder.Visibility = [System.Windows.Visibility]::Visible
@@ -2004,10 +3285,10 @@ function Update-RingGeometry {
   ) {
     return
   }
-  $size = [double]$script:Window.Width
+  $size = if ($null -ne $script:HudRingSize) { [double]$script:HudRingSize } else { [double]$script:Window.Width }
   $isBattery = $script:Style.DisplayMode -eq "battery"
   $isBadge = $script:Style.DisplayMode -eq "badge"
-  $center = $size / 2.0
+  $center = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX } else { $size / 2.0 }
   $outerRadius = if ($null -ne $script:RingOuterRadius) {
     [double]$script:RingOuterRadius
   } else {
@@ -2031,11 +3312,13 @@ function Update-RingGeometry {
     [double]$script:Window.Height - 43.0
   }
   $growthHudVisible = Test-GrowthHudVisible
+  $keyCounterHudVisible = Test-KeyCounterHudVisible
+  $hudRowVisible = $growthHudVisible -or $keyCounterHudVisible
   if ($isBattery) {
-    $barWidth = [Math]::Min(132.0, [Math]::Max(96.0, [double]$script:Window.Width - 22.0))
-    $barHeight = 9.0
-    $barX = ([double]$script:Window.Width - $barWidth) / 2.0
-    $barOffset = if ($growthHudVisible) { 39.0 } else { 12.0 }
+    $barWidth = Get-BatteryHudBarWidth
+    $barHeight = 10.0
+    $barX = $center - $barWidth / 2.0
+    $barOffset = if ($keyCounterHudVisible) { 66.0 } elseif ($growthHudVisible) { 45.0 } else { 14.0 }
     $barY = $petBottom + $barOffset
     $labelWidth = 24.0
     $bodyX = $barX + $labelWidth
@@ -2047,26 +3330,27 @@ function Update-RingGeometry {
     Set-RectangleBounds $script:PrimaryBatteryTrack $bodyX $barY $bodyWidth $barHeight
     Set-RectangleBounds $script:PrimaryBatteryFill $bodyX $barY $primaryFillWidth $barHeight
     Set-RectangleBounds $script:PrimaryBatteryCap ($bodyX + $bodyWidth + 2.0) ($barY + 2.0) $capWidth ($barHeight - 4.0)
-    Set-RectangleBounds $script:SecondaryBatteryTrack $bodyX ($barY + 15.0) $bodyWidth $barHeight
-    Set-RectangleBounds $script:SecondaryBatteryFill $bodyX ($barY + 15.0) $secondaryFillWidth $barHeight
-    Set-RectangleBounds $script:SecondaryBatteryCap ($bodyX + $bodyWidth + 2.0) ($barY + 17.0) $capWidth ($barHeight - 4.0)
+    Set-RectangleBounds $script:SecondaryBatteryTrack $bodyX ($barY + 17.0) $bodyWidth $barHeight
+    Set-RectangleBounds $script:SecondaryBatteryFill $bodyX ($barY + 17.0) $secondaryFillWidth $barHeight
+    Set-RectangleBounds $script:SecondaryBatteryCap ($bodyX + $bodyWidth + 2.0) ($barY + 19.0) $capWidth ($barHeight - 4.0)
     [System.Windows.Controls.Canvas]::SetLeft($script:PrimaryBatteryLabel, $barX)
     [System.Windows.Controls.Canvas]::SetTop($script:PrimaryBatteryLabel, $barY - 3.0)
     [System.Windows.Controls.Canvas]::SetLeft($script:SecondaryBatteryLabel, $barX)
-    [System.Windows.Controls.Canvas]::SetTop($script:SecondaryBatteryLabel, $barY + 12.0)
+    [System.Windows.Controls.Canvas]::SetTop($script:SecondaryBatteryLabel, $barY + 14.0)
     $script:BatteryPrimaryBounds = [pscustomobject]@{ X = $barX; Y = $barY; Width = $barWidth + $capWidth + 3.0; Height = $barHeight }
-    $script:BatterySecondaryBounds = [pscustomobject]@{ X = $barX; Y = $barY + 15.0; Width = $barWidth + $capWidth + 3.0; Height = $barHeight }
+    $script:BatterySecondaryBounds = [pscustomobject]@{ X = $barX; Y = $barY + 17.0; Width = $barWidth + $capWidth + 3.0; Height = $barHeight }
     $script:PrimaryBatteryFill.Fill = Get-CapacityBrush -Remaining $primaryRemaining
     $script:SecondaryBatteryFill.Fill = Get-CapacityBrush -Remaining $secondaryRemaining -Secondary
     $script:BadgePrimaryBounds = $null
     $script:BadgeSecondaryBounds = $null
   } elseif ($isBadge) {
-    $badgeWidth = [Math]::Min(156.0, [Math]::Max(128.0, [double]$script:Window.Width - 18.0))
+    $badgeWidth = Get-BadgeHudWidth
     $badgeHeight = 26.0
-    $badgeX = ([double]$script:Window.Width - $badgeWidth) / 2.0
+    $badgeX = $center - $badgeWidth / 2.0
     $badgeY = $petBottom + 8.0
     $gap = 4.0
-    $chipWidth = ($badgeWidth - 12.0 - $gap) / 2.0
+    $chipCount = if ($keyCounterHudVisible) { 3.0 } else { 2.0 }
+    $chipWidth = ($badgeWidth - 12.0 - ($gap * ($chipCount - 1.0))) / $chipCount
     $chipHeight = $badgeHeight - 8.0
     $chipY = $badgeY + 4.0
     $primaryChipX = $badgeX + 6.0
@@ -2110,6 +3394,8 @@ function Update-RingGeometry {
   }
   Update-ModeShapeVisibility
   Update-GrowthChipGeometry
+  Update-KeyCounterGeometry
+  Update-InventoryGeometry
 
   [void](Update-ReadoutText)
 }
@@ -2162,32 +3448,47 @@ function Update-PetFrame {
   $isBattery = $script:Style.DisplayMode -eq "battery"
   $isBadge = $script:Style.DisplayMode -eq "badge"
   $growthHudVisible = Test-GrowthHudVisible
+  $keyCounterHudVisible = Test-KeyCounterHudVisible
+  $hudRowVisible = $growthHudVisible -or $keyCounterHudVisible
+  $keyChipWidth = if ($keyCounterHudVisible) { Get-KeyCounterChipWidth -Mode ([string]$script:Style.DisplayMode) } else { 0.0 }
+  $growthChipWidth = if ($growthHudVisible) { Get-GrowthChipWidth } else { 0.0 }
+  $inventoryChipWidth = if ((Test-InventoryHudVisible)) { Get-InventoryHudWidth } else { 0.0 }
+  $hudRowGap = if ($growthHudVisible -and $keyCounterHudVisible -and -not $isBadge) { 6.0 } else { 0.0 }
+  $inventoryGap = if ($inventoryChipWidth -gt 0.0 -and -not $isBadge) { 6.0 } else { 0.0 }
+  $hudRowWidth = $growthChipWidth + $hudRowGap + $(if ($isBadge) { 0.0 } else { $keyChipWidth + $inventoryGap + $inventoryChipWidth })
   if ($isBattery) {
-    $windowWidth = [Math]::Max([double]$rect.Width + 34.0, 164.0)
-    $batteryHudHeight = if ($growthHudVisible) { 75.0 } else { 43.0 }
+    $baseWindowWidth = [Math]::Max([double]$rect.Width + 34.0, [Math]::Max(164.0, $hudRowWidth + 24.0))
+    $windowWidth = $baseWindowWidth
+    $batteryHudHeight = if ($keyCounterHudVisible) { 108.0 } elseif ($growthHudVisible) { 84.0 } else { 47.0 }
     $windowHeight = [double]$rect.Height + $batteryHudHeight
-    $ringSize = [Math]::Max($windowWidth, $windowHeight)
-    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $windowWidth / 2.0
+    $ringSize = [Math]::Max($baseWindowWidth, $windowHeight)
+    $hudCenterX = $baseWindowWidth / 2.0
+    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $hudCenterX
     $top = [double]$rect.Y
   } elseif ($isBadge) {
-    $windowWidth = [Math]::Max([double]$rect.Width + 40.0, 164.0)
-    $badgeHudHeight = if ($growthHudVisible) { 73.0 } else { 40.0 }
+    $badgeMinimumWidth = if ($keyCounterHudVisible) { 246.0 } else { 164.0 }
+    $baseWindowWidth = [Math]::Max([double]$rect.Width + 40.0, $badgeMinimumWidth)
+    $windowWidth = $baseWindowWidth
+    $badgeHudHeight = if ($hudRowVisible) { 73.0 } else { 40.0 }
     $windowHeight = [double]$rect.Height + $badgeHudHeight
-    $ringSize = [Math]::Max($windowWidth, $windowHeight)
-    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $windowWidth / 2.0
+    $ringSize = [Math]::Max($baseWindowWidth, $windowHeight)
+    $hudCenterX = $baseWindowWidth / 2.0
+    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $hudCenterX
     $top = [double]$rect.Y
   } else {
     $ringPadding = [double]$script:Style.RingGap + 16.0
     $ringSize = [Math]::Max([double]$rect.Width, [double]$rect.Height) + $ringPadding * 2.0
-    $minimumRingHudWidth = if ($growthHudVisible) { 164.0 } else { $ringSize }
-    $ringHudHeight = if ($growthHudVisible) { 36.0 } else { 0.0 }
-    $windowWidth = [Math]::Max($ringSize, $minimumRingHudWidth)
+    $minimumRingHudWidth = if ($hudRowVisible) { [Math]::Max(164.0, $hudRowWidth + 24.0) } else { $ringSize }
+    $ringHudHeight = if ($hudRowVisible) { 36.0 } else { 0.0 }
+    $baseWindowWidth = [Math]::Max($ringSize, $minimumRingHudWidth)
+    $windowWidth = $baseWindowWidth
     $windowHeight = $ringSize + $ringHudHeight
-    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $windowWidth / 2.0
+    $hudCenterX = $ringSize / 2.0
+    $left = [double]$rect.X + [double]$rect.Width / 2.0 - $hudCenterX
     $top = [double]$rect.Y + [double]$rect.Height / 2.0 - $ringSize / 2.0
   }
 
-  $signature = "{0}|{1:N1}|{2:N1}|{3:N1}|{4:N1}|{5:N1}|{6:N1}|{7:N1}|{8}" -f `
+  $signature = "{0}|{1:N1}|{2:N1}|{3:N1}|{4:N1}|{5:N1}|{6:N1}|{7:N1}|{8}|{9}|{10:N1}|{11:N1}" -f `
     $script:Style.DisplayMode,
     $left,
     $top,
@@ -2196,13 +3497,18 @@ function Update-PetFrame {
     $rect.X,
     $rect.Y,
     $ringSize,
-    $growthHudVisible
+    $growthHudVisible,
+    $keyCounterHudVisible,
+    $hudCenterX,
+    $keyChipWidth
   $changed = $signature -ne $script:LastPetFrameSignature
   if ($changed) {
     $script:LastPetRect = $rect
     $script:LastPetFrameSignature = $signature
     $script:RingOuterRadius = if ($isBattery -or $isBadge) { $null } else { $ringSize / 2.0 - 16.0 }
     $script:RingInnerRadius = if ($isBattery -or $isBadge) { $null } else { $script:RingOuterRadius - 13.0 }
+    $script:HudCenterX = $hudCenterX
+    $script:HudRingSize = $ringSize
     $script:Window.Width = $windowWidth
     $script:Window.Height = $windowHeight
     $script:Canvas.Width = $windowWidth
@@ -2215,6 +3521,10 @@ function Update-PetFrame {
   Set-FrameTimerActive -Active $true
   Update-PetGrowth -PetVisible $true
   Update-GrowthChipGeometry
+  Update-KeyCounterGeometry
+  Update-InventoryGeometry
+  Update-KeyCounter
+  Update-MouseClickHook
   Update-RingHoverVisibility
   Update-HoverReadout
   Move-RingBehindCodex
@@ -2225,14 +3535,55 @@ function Update-HoverReadout {
     Hide-RingReadouts
     return
   }
+  Update-MouseClickHook
   $cursor = [System.Windows.Forms.Cursor]::Position
   $localX = [double]$cursor.X - [double]$script:Window.Left
   $localY = [double]$cursor.Y - [double]$script:Window.Top
+  $clickCursor = Get-ConsumedLeftMouseClickCursor
+  $clickInInventory = $false
+  $clickLocalX = $localX
+  $clickLocalY = $localY
+  if ($null -ne $clickCursor) {
+    $clickInInventory = Test-CursorInInventoryRange -Cursor $clickCursor
+    $clickLocalX = [double]$clickCursor.X - [double]$script:Window.Left
+    $clickLocalY = [double]$clickCursor.Y - [double]$script:Window.Top
+  }
   $width = [double]$script:Window.Width
   $height = [double]$script:Window.Height
   if ($localX -lt 0 -or $localY -lt 0 -or $localX -gt $width -or $localY -gt $height) {
+    if ($clickInInventory) {
+      Set-InventoryHoverHighlight -Visible $true
+      Invoke-InventoryToggle -LocalX $clickLocalX -LocalY $clickLocalY
+      return
+    }
+    $script:InventoryMouseWasDown = $false
+    Set-InventoryHoverHighlight -Visible (Test-InventoryReadoutOpen)
     Hide-RingReadouts
     return
+  }
+  $leftMouseDown = $false
+  $leftMouseClicked = $false
+  try { $leftMouseDown = [bool][CodexPetLimitRingNative]::IsLeftMouseButtonDown() } catch {}
+  try { $leftMouseClicked = [bool][CodexPetLimitRingNative]::ConsumeLeftMouseButtonClick() } catch {}
+  if ($clickInInventory) {
+    Set-InventoryHoverHighlight -Visible $true
+    Invoke-InventoryToggle -LocalX $clickLocalX -LocalY $clickLocalY
+    return
+  }
+  if ((Test-CursorInInventoryRange -Cursor $cursor)) {
+    Set-InventoryHoverHighlight -Visible $true
+    try { [CodexPetLimitRingNative]::ShowHandCursor() } catch {}
+    if ($clickInInventory -or $leftMouseClicked -or ($leftMouseDown -and -not $script:InventoryMouseWasDown)) {
+      Invoke-InventoryToggle -LocalX $clickLocalX -LocalY $clickLocalY
+      return
+    }
+    $script:InventoryMouseWasDown = $leftMouseDown
+    if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+      return
+    }
+  } else {
+    $script:InventoryMouseWasDown = $leftMouseDown
+    Set-InventoryHoverHighlight -Visible (Test-InventoryReadoutOpen)
   }
   if ((Test-CursorInGrowthChipRange -Cursor $cursor) -and $script:Style.ShowGrowthHoverReadout) {
     $hoverSignature = "Growth|{0:N0}|{1:N0}" -f $localX, $localY
@@ -2268,8 +3619,10 @@ function Update-HoverReadout {
     Hide-RingReadouts
     return
   }
-  $size = [double]$script:Window.Width
-  $distance = [Math]::Sqrt([Math]::Pow($localX - $size / 2.0, 2) + [Math]::Pow($localY - $size / 2.0, 2))
+  $size = if ($null -ne $script:HudRingSize) { [double]$script:HudRingSize } else { [double]$script:Window.Width }
+  $centerX = if ($null -ne $script:HudCenterX) { [double]$script:HudCenterX } else { $size / 2.0 }
+  $centerY = $size / 2.0
+  $distance = [Math]::Sqrt([Math]::Pow($localX - $centerX, 2) + [Math]::Pow($localY - $centerY, 2))
   $outerRadius = if ($null -ne $script:RingOuterRadius) {
     [double]$script:RingOuterRadius
   } else {
@@ -2326,6 +3679,7 @@ function Stop-RingsApp {
   Write-AppLog "Stopping Codexy pet usages ring."
   Hide-RingReadouts
   Hide-PetHud -UpdateGrowth $false
+  try { [CodexPetLimitRingNative]::UninstallKeyboardCounter() } catch {}
   if ($null -ne $script:NotifyIcon) {
     $script:NotifyIcon.Visible = $false
     $script:NotifyIcon.Dispose()
@@ -2387,6 +3741,63 @@ function New-ReadoutWindow {
     [CodexPetLimitRingNative]::MakeClickThrough($handle)
   })
   return $window
+}
+
+function New-InventoryItemCell {
+  param([string]$ItemKey, [string]$IconPath)
+
+  $border = [System.Windows.Controls.Border]::new()
+  $border.Background = New-Brush 86 10 17 24
+  $border.BorderBrush = New-Brush 92 255 255 255
+  $border.BorderThickness = [System.Windows.Thickness]::new(1)
+  $border.CornerRadius = [System.Windows.CornerRadius]::new(7)
+  $border.Padding = [System.Windows.Thickness]::new(6, 5, 6, 5)
+  $border.Margin = [System.Windows.Thickness]::new(3)
+
+  $panel = [System.Windows.Controls.StackPanel]::new()
+  $panel.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+  $panel.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+
+  $image = [System.Windows.Controls.Image]::new()
+  $image.Source = New-RuntimeImageSource -Path $IconPath -Name $ItemKey -DecodePixelWidth 64
+  $image.Width = 34.0
+  $image.Height = 34.0
+  $image.Stretch = [System.Windows.Media.Stretch]::Uniform
+  $image.SnapsToDevicePixels = $true
+  $image.UseLayoutRounding = $true
+  $image.Margin = [System.Windows.Thickness]::new(0, 0, 6, 0)
+
+  $copyPanel = [System.Windows.Controls.StackPanel]::new()
+  $copyPanel.Orientation = [System.Windows.Controls.Orientation]::Vertical
+  $copyPanel.VerticalAlignment = [System.Windows.VerticalAlignment]::Center
+
+  $label = [System.Windows.Controls.TextBlock]::new()
+  $label.Text = Get-InventoryUiText -Key $ItemKey
+  $label.Foreground = New-Brush 236 255 255 255
+  $label.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+  $label.FontSize = 9.5
+  $label.FontWeight = [System.Windows.FontWeights]::SemiBold
+  $label.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+  $label.Width = 62.0
+
+  $count = [System.Windows.Controls.TextBlock]::new()
+  $count.Text = "x0"
+  $count.Foreground = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  $count.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+  $count.FontSize = 13.0
+  $count.FontWeight = [System.Windows.FontWeights]::Bold
+  $count.LineHeight = 15.0
+
+  $copyPanel.Children.Add($label) | Out-Null
+  $copyPanel.Children.Add($count) | Out-Null
+  $panel.Children.Add($image) | Out-Null
+  $panel.Children.Add($copyPanel) | Out-Null
+  $border.Child = $panel
+
+  $script:InventoryItemLabelBlocks[$ItemKey] = $label
+  $script:InventoryItemCountBlocks[$ItemKey] = $count
+  $script:InventoryItemBorders[$ItemKey] = $border
+  return $border
 }
 
 $script:OuterTrack = [System.Windows.Shapes.Ellipse]::new()
@@ -2509,11 +3920,75 @@ $script:GrowthChipLabel = [System.Windows.Controls.TextBlock]::new()
 $script:GrowthChipLabel.Text = Get-PetGrowthChipText
 $script:GrowthChipLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
 $script:GrowthChipLabel.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
-$script:GrowthChipLabel.FontSize = 10.0
+$script:GrowthChipLabel.FontSize = 10.5
 $script:GrowthChipLabel.FontWeight = [System.Windows.FontWeights]::Bold
 $script:GrowthChipLabel.TextAlignment = [System.Windows.TextAlignment]::Left
 $script:GrowthChipLabel.Opacity = 0.96
 $script:GrowthChipLabel.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+
+$script:KeyCounterBackground = [System.Windows.Shapes.Rectangle]::new()
+$script:KeyCounterBackground.RadiusX = 8
+$script:KeyCounterBackground.RadiusY = 8
+$script:KeyCounterBackground.StrokeThickness = 1
+$script:KeyCounterBackground.Fill = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.OuterReadoutBgRgb)
+$script:KeyCounterBackground.Stroke = New-StyleBrush ([byte][Math]::Max(24, [Math]::Min(255, [int]$script:Style.TrackOpacity + 42))) ([int[]]$script:Style.TrackRgb)
+
+$script:KeyCounterAccent = [System.Windows.Shapes.Rectangle]::new()
+$script:KeyCounterAccent.RadiusX = 2.5
+$script:KeyCounterAccent.RadiusY = 2.5
+$script:KeyCounterAccent.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+$script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Collapsed
+
+$script:KeyCounterLabel = [System.Windows.Controls.TextBlock]::new()
+$script:KeyCounterLabel.Text = Get-KeyCounterText
+$script:KeyCounterLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+$script:KeyCounterLabel.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:KeyCounterLabel.FontSize = 20.0
+$script:KeyCounterLabel.FontWeight = [System.Windows.FontWeights]::Black
+$script:KeyCounterLabel.TextAlignment = [System.Windows.TextAlignment]::Center
+$script:KeyCounterLabel.LineHeight = 18.8
+$script:KeyCounterLabel.LineStackingStrategy = [System.Windows.LineStackingStrategy]::BlockLineHeight
+$script:KeyCounterLabel.RenderTransformOrigin = [System.Windows.Point]::new(0.5, 0.5)
+$script:KeyCounterLabel.RenderTransform = [System.Windows.Media.ScaleTransform]::new(1.0, 1.0)
+$script:KeyCounterLabel.Opacity = 0.96
+$script:KeyCounterLabel.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+
+$script:InventoryBackground = [System.Windows.Shapes.Rectangle]::new()
+$script:InventoryBackground.RadiusX = 7
+$script:InventoryBackground.RadiusY = 7
+$script:InventoryBackground.StrokeThickness = 1
+$script:InventoryBackground.Fill = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.InnerReadoutBgRgb)
+$script:InventoryBackground.Stroke = New-StyleBrush ([byte][Math]::Max(24, [Math]::Min(255, [int]$script:Style.TrackOpacity + 36))) ([int[]]$script:Style.TrackRgb)
+$script:InventoryBackground.Visibility = [System.Windows.Visibility]::Collapsed
+
+$script:InventoryHoverBorder = [System.Windows.Shapes.Rectangle]::new()
+$script:InventoryHoverBorder.RadiusX = 8
+$script:InventoryHoverBorder.RadiusY = 8
+$script:InventoryHoverBorder.StrokeThickness = 2.0
+$script:InventoryHoverBorder.Stroke = New-Brush 236 255 218 0
+$script:InventoryHoverBorder.Fill = New-Brush 22 255 218 0
+$script:InventoryHoverBorder.Visibility = [System.Windows.Visibility]::Collapsed
+
+$script:InventoryIcon = [System.Windows.Controls.Image]::new()
+$script:InventoryIcon.Source = New-RewardChestImageSource
+$script:InventoryIcon.Stretch = [System.Windows.Media.Stretch]::Uniform
+$script:InventoryIcon.SnapsToDevicePixels = $true
+$script:InventoryIcon.UseLayoutRounding = $true
+
+$script:InventoryCountBackground = [System.Windows.Shapes.Rectangle]::new()
+$script:InventoryCountBackground.RadiusX = 4
+$script:InventoryCountBackground.RadiusY = 4
+$script:InventoryCountBackground.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+
+$script:InventoryLabel = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryLabel.Text = Get-InventoryHudText
+$script:InventoryLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+$script:InventoryLabel.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryLabel.FontSize = 7.5
+$script:InventoryLabel.FontWeight = [System.Windows.FontWeights]::Bold
+$script:InventoryLabel.TextAlignment = [System.Windows.TextAlignment]::Center
+$script:InventoryLabel.Opacity = 0.92
+$script:InventoryLabel.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
 
 $script:OuterReadoutText = [System.Windows.Controls.TextBlock]::new()
 $script:OuterReadoutText.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
@@ -2532,6 +4007,77 @@ $script:GrowthReadoutText.Foreground = New-StyleBrush ([byte]$script:Style.Reado
 $script:GrowthReadoutText.FontSize = [double]$script:Style.ReadoutFontSize
 $script:GrowthReadoutText.LineHeight = [double]$script:Style.ReadoutLineHeight
 $script:GrowthReadoutText.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+
+$script:InventoryReadoutText = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryReadoutText.Text = Get-InventoryReadoutText
+$script:InventoryReadoutText.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+$script:InventoryReadoutText.FontSize = [double]$script:Style.ReadoutFontSize
+$script:InventoryReadoutText.LineHeight = [double]$script:Style.ReadoutLineHeight
+$script:InventoryReadoutText.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryReadoutText.FontWeight = [System.Windows.FontWeights]::SemiBold
+$script:InventoryReadoutText.Visibility = [System.Windows.Visibility]::Collapsed
+
+$script:InventoryReadoutPanel = [System.Windows.Controls.StackPanel]::new()
+$script:InventoryReadoutPanel.Orientation = [System.Windows.Controls.Orientation]::Vertical
+$script:InventoryReadoutPanel.Width = 250.0
+
+$script:InventoryReadoutTitle = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryReadoutTitle.Text = Get-InventoryUiText -Key "Title"
+$script:InventoryReadoutTitle.Foreground = New-Brush 248 255 255 255
+$script:InventoryReadoutTitle.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryReadoutTitle.FontSize = 13.5
+$script:InventoryReadoutTitle.FontWeight = [System.Windows.FontWeights]::Bold
+$script:InventoryReadoutTitle.Margin = [System.Windows.Thickness]::new(3, 0, 3, 2)
+
+$script:InventoryReadoutHint = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryReadoutHint.Text = Get-InventoryUiText -Key "EmptyHint"
+$script:InventoryReadoutHint.Foreground = New-Brush 190 220 236 244
+$script:InventoryReadoutHint.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryReadoutHint.FontSize = 9.5
+$script:InventoryReadoutHint.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+$script:InventoryReadoutHint.Margin = [System.Windows.Thickness]::new(3, 0, 3, 5)
+
+$script:InventoryReadoutGrid = [System.Windows.Controls.Grid]::new()
+$script:InventoryReadoutGrid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
+for ($i = 0; $i -lt 2; $i++) {
+  $column = [System.Windows.Controls.ColumnDefinition]::new()
+  $column.Width = [System.Windows.GridLength]::new(1, [System.Windows.GridUnitType]::Star)
+  $script:InventoryReadoutGrid.ColumnDefinitions.Add($column)
+  $row = [System.Windows.Controls.RowDefinition]::new()
+  $row.Height = [System.Windows.GridLength]::new(48.0)
+  $script:InventoryReadoutGrid.RowDefinitions.Add($row)
+}
+
+$fontPixelCell = New-InventoryItemCell -ItemKey "fontPixel" -IconPath $InventoryIconPaths.fontPixel
+[System.Windows.Controls.Grid]::SetColumn($fontPixelCell, 0)
+[System.Windows.Controls.Grid]::SetRow($fontPixelCell, 0)
+$fontTerminalCell = New-InventoryItemCell -ItemKey "fontTerminal" -IconPath $InventoryIconPaths.fontTerminal
+[System.Windows.Controls.Grid]::SetColumn($fontTerminalCell, 1)
+[System.Windows.Controls.Grid]::SetRow($fontTerminalCell, 0)
+$themeArcaneCell = New-InventoryItemCell -ItemKey "themeArcane" -IconPath $InventoryIconPaths.themeArcane
+[System.Windows.Controls.Grid]::SetColumn($themeArcaneCell, 0)
+[System.Windows.Controls.Grid]::SetRow($themeArcaneCell, 1)
+$themeRoyalCell = New-InventoryItemCell -ItemKey "themeRoyal" -IconPath $InventoryIconPaths.themeRoyal
+[System.Windows.Controls.Grid]::SetColumn($themeRoyalCell, 1)
+[System.Windows.Controls.Grid]::SetRow($themeRoyalCell, 1)
+$script:InventoryReadoutGrid.Children.Add($fontPixelCell) | Out-Null
+$script:InventoryReadoutGrid.Children.Add($fontTerminalCell) | Out-Null
+$script:InventoryReadoutGrid.Children.Add($themeArcaneCell) | Out-Null
+$script:InventoryReadoutGrid.Children.Add($themeRoyalCell) | Out-Null
+
+$script:InventoryReadoutStats = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryReadoutStats.Foreground = New-Brush 202 220 236 244
+$script:InventoryReadoutStats.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryReadoutStats.FontSize = 9.5
+$script:InventoryReadoutStats.FontWeight = [System.Windows.FontWeights]::SemiBold
+$script:InventoryReadoutStats.Margin = [System.Windows.Thickness]::new(3, 0, 3, 0)
+
+$script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutTitle) | Out-Null
+$script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutHint) | Out-Null
+$script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutGrid) | Out-Null
+$script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutStats) | Out-Null
+$script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutText) | Out-Null
+[void](Update-InventoryReadoutContent)
 
 $script:OuterReadoutBorder = [System.Windows.Controls.Border]::new()
 $script:OuterReadoutBorder.Background = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.OuterReadoutBgRgb)
@@ -2554,9 +4100,17 @@ $script:GrowthReadoutBorder.Padding = [System.Windows.Thickness]::new(7, 4, 7, 5
 $script:GrowthReadoutBorder.Child = $script:GrowthReadoutText
 $script:GrowthReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
 
+$script:InventoryReadoutBorder = [System.Windows.Controls.Border]::new()
+$script:InventoryReadoutBorder.Background = New-StyleBrush ([byte]$script:Style.ReadoutOpacity) ([int[]]$script:Style.InnerReadoutBgRgb)
+$script:InventoryReadoutBorder.CornerRadius = [System.Windows.CornerRadius]::new(7)
+$script:InventoryReadoutBorder.Padding = [System.Windows.Thickness]::new(8, 7, 8, 7)
+$script:InventoryReadoutBorder.Child = $script:InventoryReadoutPanel
+$script:InventoryReadoutBorder.Visibility = [System.Windows.Visibility]::Collapsed
+
 $script:OuterReadoutWindow = New-ReadoutWindow -Content $script:OuterReadoutBorder
 $script:InnerReadoutWindow = New-ReadoutWindow -Content $script:InnerReadoutBorder
 $script:GrowthReadoutWindow = New-ReadoutWindow -Content $script:GrowthReadoutBorder
+$script:InventoryReadoutWindow = New-ReadoutWindow -Content $script:InventoryReadoutBorder
 
 $script:Canvas.Children.Add($script:OuterTrack) | Out-Null
 $script:Canvas.Children.Add($script:InnerTrack) | Out-Null
@@ -2579,6 +4133,14 @@ $script:Canvas.Children.Add($script:SecondaryBadgeLabel) | Out-Null
 $script:Canvas.Children.Add($script:GrowthChipBackground) | Out-Null
 $script:Canvas.Children.Add($script:GrowthChipAccent) | Out-Null
 $script:Canvas.Children.Add($script:GrowthChipLabel) | Out-Null
+$script:Canvas.Children.Add($script:KeyCounterBackground) | Out-Null
+$script:Canvas.Children.Add($script:KeyCounterAccent) | Out-Null
+$script:Canvas.Children.Add($script:KeyCounterLabel) | Out-Null
+$script:Canvas.Children.Add($script:InventoryBackground) | Out-Null
+$script:Canvas.Children.Add($script:InventoryHoverBorder) | Out-Null
+$script:Canvas.Children.Add($script:InventoryIcon) | Out-Null
+$script:Canvas.Children.Add($script:InventoryCountBackground) | Out-Null
+$script:Canvas.Children.Add($script:InventoryLabel) | Out-Null
 Set-RingVisualsVisible -Visible $false
 
 $script:Window.Add_SourceInitialized({
@@ -2651,6 +4213,17 @@ $script:FrameTimer.Add_Tick({
   }
 })
 
+$script:KeyCounterTimer = [System.Windows.Threading.DispatcherTimer]::new()
+$script:KeyCounterTimer.Interval = [TimeSpan]::FromMilliseconds($KeyCounterPollMs)
+$script:KeyCounterTimer.Add_Tick({
+  try {
+    Update-KeyCounter
+  } catch {
+    Write-AppLog "Key counter update failed: $($_.Exception.Message)"
+  }
+})
+$script:KeyCounterTimer.Start()
+
 $script:PetTimer = [System.Windows.Threading.DispatcherTimer]::new()
 $script:PetTimer.Interval = [TimeSpan]::FromMilliseconds($PetPollMs)
 $script:PetTimer.Add_Tick({
@@ -2690,6 +4263,7 @@ $script:SettingsTimer.Add_Tick({
   try {
     if (Update-StyleFromSettings) {
       Apply-StyleSettings
+      Update-KeyCounterHook
       Write-AppLog "Settings reloaded from $SettingsPath"
     }
   } catch {
@@ -2715,7 +4289,9 @@ Update-PetFrame
 
 $script:App.Add_Exit({
   Save-PetGrowthState -Force
-  foreach ($timer in @($script:FrameTimer, $script:PetTimer, $script:LifecycleTimer, $script:UsageTimer, $script:SettingsTimer, $script:MaintenanceTimer)) {
+  try { [CodexPetLimitRingNative]::UninstallKeyboardCounter() } catch {}
+  try { [CodexPetLimitRingNative]::UninstallMouseClickCounter() } catch {}
+  foreach ($timer in @($script:FrameTimer, $script:KeyCounterTimer, $script:PetTimer, $script:LifecycleTimer, $script:UsageTimer, $script:SettingsTimer, $script:MaintenanceTimer)) {
     if ($null -ne $timer) {
       try { $timer.Stop() } catch {}
     }

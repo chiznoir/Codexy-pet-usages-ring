@@ -57,20 +57,7 @@ function Get-ProjectRelativePath {
 function Test-ProjectPathExcluded {
   param([string]$Path)
   $relativePath = Get-ProjectRelativePath -Path $Path
-  $leaf = Split-Path -Leaf $relativePath
-  if ($relativePath -in @(
-    ".gitignore",
-    "gamification.json",
-    "settings.json",
-    "docs/assets/current-pet-usage-capture.png",
-    "docs/assets/imagegen-hero-background.png"
-  )) { return $true }
-  if ($relativePath -like "dist/*" -or $relativePath -eq "dist") { return $true }
-  if ($relativePath -like "logs/*" -or $relativePath -eq "logs") { return $true }
-  if ($relativePath -like "qa/*" -or $relativePath -eq "qa") { return $true }
-  if ($relativePath -like "*.log" -or $relativePath -like "*.tmp" -or $relativePath -like "*.bak" -or $relativePath -like "*.zip") { return $true }
-  if ($leaf -eq ".DS_Store" -or $leaf -eq "Thumbs.db") { return $true }
-  return $false
+  return (Test-CodexPetReleasePathExcluded -RelativePath $relativePath)
 }
 
 function Remove-ObsoleteEntryPoints {
@@ -143,6 +130,11 @@ if (-not (Test-Path -LiteralPath $runtimeStateScript)) {
 . $runtimeStateScript
 
 $sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
+$releaseManifestScript = Join-Path $sourceRoot "tools\ReleaseManifest.ps1"
+if (-not (Test-Path -LiteralPath $releaseManifestScript)) {
+  throw "Missing release manifest: $releaseManifestScript"
+}
+. $releaseManifestScript
 if ([string]::IsNullOrWhiteSpace($InstallDir)) {
   $InstallDir = Get-CodexPetDefaultInstallDir
 }
@@ -156,7 +148,7 @@ if ((Test-Path -LiteralPath $targetRoot) -and -not $Force) {
 
 if ($sourceRoot -ne $targetRoot) {
   New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
-  foreach ($name in @("Install.bat", "Start.bat", "Stop.bat", "Status.bat", "Settings.bat", "Uninstall.bat", "bin", "src", "docs", "tools", "settings", "settings.defaults.json", "README.md", "README.ko.md", "README.ja.md", "README.zh.md", "LICENSE", "NOTICE.md", "CHANGELOG.md", "SECURITY.md", "VERSION")) {
+  foreach ($name in $script:CodexPetReleaseItems) {
     Copy-ProjectFile -Name $name
   }
 } else {
@@ -164,7 +156,9 @@ if ($sourceRoot -ne $targetRoot) {
 }
 if ($sourceRoot -ne $targetRoot) {
   Remove-ObsoleteEntryPoints
-  Assert-InstalledProjectFileMatches -Name "settings\index.html"
+  foreach ($name in $script:CodexPetRequiredFreshFiles) {
+    Assert-InstalledProjectFileMatches -Name ($name -replace '/', '\')
+  }
 }
 Write-CodexPetInstallMarker -ProjectRoot $targetRoot -SourceRoot $sourceRoot -Version $version
 

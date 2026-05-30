@@ -36,7 +36,10 @@
   "gamification": {
     "enabled": false,
     "growthMode": "balanced",
+    "hudFocus": "growth",
     "showGrowthChip": true,
-    "showHoverReadout": true
+    "showHoverReadout": true,
+    "showKeyCounter": true,
+    "showKeyEffects": true
   }
 }

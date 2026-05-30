@@ -92,6 +92,23 @@ function New-PetGrowthState {
     lastUpdatedAt = $null
     lastCondition = "waiting"
     awardedResetKeys = @()
+    inventory = [ordered]@{
+      snack = 0
+      gem = 0
+      ticket = 0
+      patch = 0
+      fontPixel = $false
+      fontTerminal = $false
+      themeArcane = $false
+      themeRoyal = $false
+      activeFont = ""
+      activeTheme = ""
+      rewardRolls = 0
+      totalDrops = 0
+      totalKeys = 0
+      lastDropAt = $null
+      lastDropItem = ""
+    }
   }
 }
 
@@ -142,6 +159,24 @@ function Normalize-PetGrowthState {
   if ($lastCondition -notin @("waiting", "healthy", "stable", "tired", "sleepy")) { $lastCondition = $condition }
   $todayKey = [string](& $get $State "todayKey" (Get-PetGrowthDateKey -Now $Now))
   if ([string]::IsNullOrWhiteSpace($todayKey)) { $todayKey = Get-PetGrowthDateKey -Now $Now }
+  $inventory = & $get $State "inventory" $null
+  $fontPixel = [bool](& $get $inventory "fontPixel" $false)
+  $fontTerminal = [bool](& $get $inventory "fontTerminal" $false)
+  $themeArcane = [bool](& $get $inventory "themeArcane" $false)
+  $themeRoyal = [bool](& $get $inventory "themeRoyal" $false)
+  $cosmeticDropCount = @($fontPixel, $fontTerminal, $themeArcane, $themeRoyal).Where({ $_ }).Count
+  $activeFont = [string](& $get $inventory "activeFont" "")
+  if ($activeFont -notin @("fontPixel", "fontTerminal") -or -not [bool](& $get $inventory $activeFont $false)) { $activeFont = "" }
+  $activeTheme = [string](& $get $inventory "activeTheme" "")
+  if ($activeTheme -notin @("themeArcane", "themeRoyal") -or -not [bool](& $get $inventory $activeTheme $false)) { $activeTheme = "" }
+  $lastDropItem = [string](& $get $inventory "lastDropItem" "")
+  $lastDropAt = & $get $inventory "lastDropAt" $null
+  if ($lastDropItem -notin @("fontPixel", "fontTerminal", "themeArcane", "themeRoyal")) {
+    $lastDropItem = ""
+    $lastDropAt = $null
+  }
+  $rewardRolls = [Math]::Max(0, [int][double](& $get $inventory "rewardRolls" 0))
+  if ($cosmeticDropCount -le 0) { $rewardRolls = 0 }
 
   return [PSCustomObject][ordered]@{
     version = 1
@@ -157,6 +192,23 @@ function Normalize-PetGrowthState {
     lastUpdatedAt = & $get $State "lastUpdatedAt" $null
     lastCondition = $lastCondition
     awardedResetKeys = Normalize-PetGrowthResetKeys (& $get $State "awardedResetKeys" @())
+    inventory = [ordered]@{
+      snack = [Math]::Max(0, [int][double](& $get $inventory "snack" 0))
+      gem = [Math]::Max(0, [int][double](& $get $inventory "gem" 0))
+      ticket = [Math]::Max(0, [int][double](& $get $inventory "ticket" 0))
+      patch = [Math]::Max(0, [int][double](& $get $inventory "patch" 0))
+      fontPixel = $fontPixel
+      fontTerminal = $fontTerminal
+      themeArcane = $themeArcane
+      themeRoyal = $themeRoyal
+      activeFont = $activeFont
+      activeTheme = $activeTheme
+      rewardRolls = $rewardRolls
+      totalDrops = $cosmeticDropCount
+      totalKeys = [Math]::Max(0, [int][double](& $get $inventory "totalKeys" 0))
+      lastDropAt = $lastDropAt
+      lastDropItem = $lastDropItem
+    }
   }
 }
 
