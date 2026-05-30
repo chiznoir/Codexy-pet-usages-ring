@@ -118,6 +118,37 @@ function Clear-DeployDirectory {
   return $resolvedDeploy
 }
 
+function Assert-DeployInitialRewardState {
+  param([string]$ExtractPath)
+
+  Write-Step "Verifying deployment starts with locked rewards"
+  $stateFileNames = @("gamification.json", "settings.json")
+  $stateFiles = @(Get-ChildItem -LiteralPath $ExtractPath -Recurse -File -Force | Where-Object {
+    $_.Name -in $stateFileNames
+  } | ForEach-Object {
+    $_.FullName.Substring($ExtractPath.TrimEnd("\").Length + 1) -replace '\\', '/'
+  })
+  if ($stateFiles.Count -gt 0) {
+    throw "Deployment must not include local reward/settings state files: $($stateFiles -join ', ')"
+  }
+
+  $defaultsPath = Join-Path $ExtractPath "settings.defaults.json"
+  if (-not (Test-Path -LiteralPath $defaultsPath -PathType Leaf)) {
+    throw "Deployment is missing settings.defaults.json."
+  }
+
+  $defaults = Get-Content -Raw -LiteralPath $defaultsPath | ConvertFrom-Json
+  if ($null -ne $defaults.inventory) {
+    throw "settings.defaults.json must not include reward inventory unlock state."
+  }
+  if ($null -eq $defaults.gamification) {
+    throw "settings.defaults.json must include gamification defaults."
+  }
+  if ([bool]$defaults.gamification.enabled) {
+    throw "Deploy defaults must keep gamification disabled until the user enables it."
+  }
+}
+
 function New-VerifiedDeployZip {
   param([string]$TargetVersion, [string]$OutputDirectory)
 
@@ -165,6 +196,7 @@ function New-VerifiedDeployZip {
   if ($missing.Count -gt 0 -or $mismatch.Count -gt 0 -or $forbidden.Count -gt 0) {
     throw "Deployment verification failed. Missing=$($missing -join ',') Mismatch=$($mismatch -join ',') Forbidden=$($forbidden -join ',')"
   }
+  Assert-DeployInitialRewardState -ExtractPath $extractPath
 
   $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash
   return [PSCustomObject]@{
@@ -203,14 +235,167 @@ function Invoke-InstallRefresh {
 
 function Get-ReleaseNotes {
   param([string]$TargetVersion, [string]$Sha256)
+  $body = Get-ChangelogBody -TargetVersion $TargetVersion
+  return "## $TargetVersion`r`n`r`n$body`r`n`r`nSHA256: ``$Sha256``"
+}
+
+function Get-ChangelogBody {
+  param([string]$TargetVersion)
+
   $text = Get-Content -Raw -LiteralPath (Join-Path $root "CHANGELOG.md")
   $pattern = "(?ms)^##\s+$([regex]::Escape($TargetVersion))\s*(.*?)(?=^##\s+\d+\.\d+\.\d+\s*$|\z)"
   $match = [regex]::Match($text, $pattern)
   if (-not $match.Success) {
     throw "Could not extract CHANGELOG.md notes for $TargetVersion."
   }
-  $body = $match.Groups[1].Value.Trim()
-  return "## $TargetVersion`r`n`r`n$body`r`n`r`nSHA256: ``$Sha256``"
+  return $match.Groups[1].Value.Trim()
+}
+
+function Convert-ChangelogHeadingKo {
+  param([string]$Heading)
+
+  switch ($Heading) {
+    "Added" { return "추가" }
+    "Changed" { return "변경" }
+    "Fixed" { return "수정" }
+    "Removed" { return "제거" }
+    "Security" { return "보안" }
+    default { return $Heading }
+  }
+}
+
+function Convert-ChangelogHeadingEmoji {
+  param([string]$Heading)
+
+  switch ($Heading) {
+    "Added" { return "✨" }
+    "Changed" { return "🔧" }
+    "Fixed" { return "✅" }
+    "Removed" { return "🧹" }
+    "Security" { return "🛡️" }
+    default { return "•" }
+  }
+}
+
+function Convert-ChangelogBulletKo {
+  param([string]$Bullet)
+
+  switch ($Bullet) {
+    "Replaced cat, dog, and bear paw reward effect sprites with cleaner animal-specific paws and no surrounding particle clutter." {
+      return "고양이, 강아지, 곰 발바닥 보상 이펙트 스프라이트를 더 깔끔하고 동물별 특징이 보이는 이미지로 교체했습니다."
+    }
+    "Changed the keyboard counter hook to count only the first key-down event for each held key, preventing OS key-repeat from inflating counts." {
+      return "키를 누르고 있을 때 OS 반복 입력이 카운트를 부풀리지 않도록, 각 키의 첫 key-down 이벤트만 카운트하게 개선했습니다."
+    }
+    "Added key-up state tracking and hook reset cleanup so held keys cannot remain stuck as already counted after visibility or hook changes." {
+      return "key-up 상태 추적과 훅 리셋 정리를 추가해 표시 상태나 훅 변경 뒤에도 키가 이미 카운트된 상태로 고정되지 않게 했습니다."
+    }
+    "Updated smoke checks to guard the no-repeat keyboard counter behavior and the refreshed reward effect assets." {
+      return "반복 카운트 방지 동작과 갱신된 보상 이펙트 에셋을 smoke checks에서 검증하도록 업데이트했습니다."
+    }
+    "Added release announcement output to the release harness with separate Korean and English text blocks generated from the current changelog entry." {
+      return "릴리즈 하네스 마지막에 현재 CHANGELOG 항목을 기반으로 한국어와 영어 안내문 코드블록을 각각 출력하도록 추가했습니다."
+    }
+    "Added deployment validation that fails the release if local reward or settings state files are included in the deploy package." {
+      return "배포 패키지에 로컬 보상 상태나 설정 상태 파일이 포함되면 릴리즈가 실패하도록 배포 검증을 추가했습니다."
+    }
+    "Repositioned the reward bag and reward picker popovers below their HUD anchors so they avoid covering the pet, counter, and other HUD elements." {
+      return "보상 보관함과 보상 선택 팝오버를 HUD 앵커 아래쪽에 배치해 펫, 카운터, 다른 HUD 요소를 가리지 않도록 개선했습니다."
+    }
+    "Kept deployment defaults locked by verifying release packages do not include inventory unlock state and keep gamification disabled by default." {
+      return "릴리즈 패키지에 인벤토리 해금 상태가 없고 기본 gamification 값이 꺼져 있는지 확인해 배포 기본 상태를 잠금 상태로 유지합니다."
+    }
+    "Fixed stale fully unlocked local test state from leaking into the deployment folder or release zip." {
+      return "테스트 중 전체해금된 로컬 상태가 배포용 폴더나 릴리즈 zip으로 새어 나가지 않도록 수정했습니다."
+    }
+    "Fixed reward bag popover placement so it no longer opens to the side over nearby HUD controls." {
+      return "보상 보관함 팝오버가 옆으로 열려 근처 HUD 컨트롤 위를 덮는 배치 문제를 수정했습니다."
+    }
+    default {
+      return $Bullet
+    }
+  }
+}
+
+function Convert-ChangelogBodyToAnnouncementLines {
+  param([string]$Body, [switch]$Korean)
+
+  $lines = New-Object System.Collections.Generic.List[string]
+  $body -split "`r?`n" | ForEach-Object {
+    $line = $_.Trim()
+    if ([string]::IsNullOrWhiteSpace($line)) { return }
+
+    if ($line -match '^###\s+(.+)$') {
+      $heading = $matches[1].Trim()
+      $emoji = Convert-ChangelogHeadingEmoji -Heading $heading
+      if ($Korean) {
+        $lines.Add("")
+        $lines.Add("$emoji $(Convert-ChangelogHeadingKo -Heading $heading)")
+      } else {
+        $lines.Add("")
+        $lines.Add("$emoji $heading")
+      }
+      return
+    }
+
+    if ($line -match '^-\s+(.+)$') {
+      $bullet = $matches[1].Trim()
+      if ($Korean) {
+        $bullet = Convert-ChangelogBulletKo -Bullet $bullet
+      }
+      $lines.Add("- $bullet")
+    }
+  }
+
+  while ($lines.Count -gt 0 -and [string]::IsNullOrWhiteSpace($lines[0])) {
+    $lines.RemoveAt(0)
+  }
+  return @($lines)
+}
+
+function Get-ReleaseAnnouncement {
+  param([string]$TargetVersion)
+
+  $displayVersion = "v$TargetVersion"
+  $fenceStart = (([string][char]96) * 3) + "text"
+  $fenceEnd = ([string][char]96) * 3
+  $changelogBody = Get-ChangelogBody -TargetVersion $TargetVersion
+  $koreanUpdates = Convert-ChangelogBodyToAnnouncementLines -Body $changelogBody -Korean
+  $englishUpdates = Convert-ChangelogBodyToAnnouncementLines -Body $changelogBody
+
+  $koreanLines = @(
+    $fenceStart,
+    "✨ Codexy Pet Usages Ring $displayVersion 업데이트 ",
+    "",
+    "이번 버전에 포함된 업데이트입니다.",
+    ""
+  ) + $koreanUpdates + @(
+    "",
+    "🐾 Codex Desktop 안에서 즐기는",
+    "작은 펫 게이미피케이션 기능입니다.",
+    "",
+    "🔗 https://github.com/himomohi/Codexy-pet-usages-ring",
+    $fenceEnd
+  )
+  $korean = $koreanLines -join "`r`n"
+
+  $englishLines = @(
+    $fenceStart,
+    "✨ Codexy Pet Usages Ring $displayVersion Update",
+    "",
+    "This release includes the following updates.",
+    ""
+  ) + $englishUpdates + @(
+    "",
+    "🐾 A Small Pet Gamification Feature",
+    "Made to be enjoyed inside Codex Desktop.",
+    "",
+    "🔗 https://github.com/himomohi/Codexy-pet-usages-ring",
+    $fenceEnd
+  )
+  $english = $englishLines -join "`r`n"
+
+  return ($korean + "`r`n`r`n" + $english)
 }
 
 function Publish-GitHubRelease {
@@ -278,3 +463,6 @@ Write-Step "Release harness completed"
   ExtractedFileCount = $deploy.FileCount
   Published = [bool]$PublishGitHub
 } | Format-List
+
+Write-Step "Release announcement"
+Write-Output (Get-ReleaseAnnouncement -TargetVersion $Version)

@@ -3325,9 +3325,9 @@ function Show-InventoryReadout {
   $script:InventoryReadoutBorder.Visibility = [System.Windows.Visibility]::Visible
   $script:InventoryReadoutPinned = $true
   [void](Update-ReadoutText -Force)
-  $screenX = [double]$script:Window.Left + [double]$script:InventoryHitBounds.X + [double]$script:InventoryHitBounds.Width / 2.0
-  $screenY = [double]$script:Window.Top + [double]$script:InventoryHitBounds.Y + [double]$script:InventoryHitBounds.Height / 2.0
-  Set-ReadoutWindowNearPoint -Window $script:InventoryReadoutWindow -Border $script:InventoryReadoutBorder -ScreenX $screenX -ScreenY $screenY
+  $anchor = Get-InventoryAnchorScreenRect
+  $avoidRects = @((Get-MainHudScreenRect), $script:LastPetRect)
+  Set-ReadoutWindowBelowAnchor -Window $script:InventoryReadoutWindow -Border $script:InventoryReadoutBorder -AnchorRect $anchor -AvoidRects $avoidRects
   if (-not $script:InventoryReadoutWindow.IsVisible) { $script:InventoryReadoutWindow.Show() }
 }
 
@@ -3362,17 +3362,13 @@ function Show-InventoryPicker {
 
   Update-InventoryReadoutContent
   $script:InventoryPickerBorder.Visibility = [System.Windows.Visibility]::Visible
-  $screenX = if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
-    [double]$script:InventoryReadoutWindow.Left + 360.0
+  $anchor = if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
+    Get-WindowScreenRect -Window $script:InventoryReadoutWindow
   } else {
-    [double]$script:Window.Left + [double]$script:InventoryHitBounds.X + [double]$script:InventoryHitBounds.Width + 140.0
+    Get-InventoryAnchorScreenRect
   }
-  $screenY = if ($null -ne $script:InventoryReadoutWindow -and $script:InventoryReadoutWindow.IsVisible) {
-    [double]$script:InventoryReadoutWindow.Top + 50.0
-  } else {
-    [double]$script:Window.Top + [double]$script:InventoryHitBounds.Y
-  }
-  Set-ReadoutWindowNearPoint -Window $script:InventoryPickerWindow -Border $script:InventoryPickerBorder -ScreenX $screenX -ScreenY $screenY
+  $avoidRects = @((Get-MainHudScreenRect), $script:LastPetRect, (Get-WindowScreenRect -Window $script:InventoryReadoutWindow))
+  Set-ReadoutWindowBelowAnchor -Window $script:InventoryPickerWindow -Border $script:InventoryPickerBorder -AnchorRect $anchor -AvoidRects $avoidRects
   if (-not $script:InventoryPickerWindow.IsVisible) { $script:InventoryPickerWindow.Show() }
 }
 
@@ -3615,6 +3611,98 @@ function Clamp-ReadoutPlacement {
   $left = [Math]::Max([double]$Bounds.Left + 4.0, [Math]::Min([double]$Placement.Left, [double]$Bounds.Right - [double]$Placement.Width - 4.0))
   $top = [Math]::Max([double]$Bounds.Top + 4.0, [Math]::Min([double]$Placement.Top, [double]$Bounds.Bottom - [double]$Placement.Height - 4.0))
   return New-ReadoutPlacement -Left $left -Top $top -Width ([double]$Placement.Width) -Height ([double]$Placement.Height)
+}
+
+function Get-MainHudScreenRect {
+  if ($null -eq $script:Window -or -not $script:Window.IsVisible) { return $null }
+  return [PSCustomObject]@{
+    X = [double]$script:Window.Left
+    Y = [double]$script:Window.Top
+    Width = [double]$script:Window.Width
+    Height = [double]$script:Window.Height
+  }
+}
+
+function Get-WindowScreenRect {
+  param($Window)
+  if ($null -eq $Window -or -not $Window.IsVisible) { return $null }
+  return [PSCustomObject]@{
+    X = [double]$Window.Left
+    Y = [double]$Window.Top
+    Width = [double]$Window.Width
+    Height = [double]$Window.Height
+  }
+}
+
+function Get-InventoryAnchorScreenRect {
+  if ($null -eq $script:Window -or $null -eq $script:InventoryHitBounds) { return $null }
+  return [PSCustomObject]@{
+    X = [double]$script:Window.Left + [double]$script:InventoryHitBounds.X
+    Y = [double]$script:Window.Top + [double]$script:InventoryHitBounds.Y
+    Width = [double]$script:InventoryHitBounds.Width
+    Height = [double]$script:InventoryHitBounds.Height
+  }
+}
+
+function Test-ReadoutPlacementClear {
+  param($Placement, $AvoidRects)
+  foreach ($rect in @($AvoidRects)) {
+    if ($null -eq $rect) { continue }
+    if (Test-RectOverlap -Left ([double]$Placement.Left) -Top ([double]$Placement.Top) -Width ([double]$Placement.Width) -Height ([double]$Placement.Height) -Rect $rect) {
+      return $false
+    }
+  }
+  return $true
+}
+
+function Set-ReadoutWindowBelowAnchor {
+  param($Window, $Border, $AnchorRect, $AvoidRects = @())
+  if ($null -eq $Window -or $null -eq $Border -or $null -eq $AnchorRect) { return }
+
+  $Border.Measure([System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
+  $width = [double]$Border.DesiredSize.Width
+  $height = [double]$Border.DesiredSize.Height
+  $Window.Width = $width
+  $Window.Height = $height
+
+  $screenX = [double]$AnchorRect.X + [double]$AnchorRect.Width / 2.0
+  $screenY = [double]$AnchorRect.Y + [double]$AnchorRect.Height / 2.0
+  $screen = [System.Windows.Forms.Screen]::FromPoint([System.Drawing.Point]::new([int][Math]::Round($screenX), [int][Math]::Round($screenY)))
+  $bounds = $screen.WorkingArea
+  $margin = 10.0
+  $mainHud = Get-MainHudScreenRect
+  $belowTop = [double]$AnchorRect.Y + [double]$AnchorRect.Height + $margin
+  if ($null -ne $mainHud) {
+    $belowTop = [Math]::Max($belowTop, [double]$mainHud.Y + [double]$mainHud.Height + $margin)
+  }
+  $centerLeft = $screenX - $width / 2.0
+  $rightAlignedLeft = [double]$AnchorRect.X + [double]$AnchorRect.Width - $width
+  $leftAlignedLeft = [double]$AnchorRect.X
+  $aboveTop = if ($null -ne $mainHud) { [double]$mainHud.Y - $height - $margin } else { [double]$AnchorRect.Y - $height - $margin }
+
+  $candidates = @(
+    (New-ReadoutPlacement -Left $centerLeft -Top $belowTop -Width $width -Height $height),
+    (New-ReadoutPlacement -Left $rightAlignedLeft -Top $belowTop -Width $width -Height $height),
+    (New-ReadoutPlacement -Left $leftAlignedLeft -Top $belowTop -Width $width -Height $height),
+    (New-ReadoutPlacement -Left $centerLeft -Top $aboveTop -Width $width -Height $height),
+    (New-ReadoutPlacement -Left $rightAlignedLeft -Top $aboveTop -Width $width -Height $height),
+    (New-ReadoutPlacement -Left $leftAlignedLeft -Top $aboveTop -Width $width -Height $height)
+  )
+
+  $chosen = $null
+  foreach ($candidate in $candidates) {
+    $clamped = Clamp-ReadoutPlacement -Placement $candidate -Bounds $bounds
+    if (Test-ReadoutPlacementClear -Placement $clamped -AvoidRects $AvoidRects) {
+      $chosen = $clamped
+      break
+    }
+  }
+  if ($null -eq $chosen) {
+    $chosen = Clamp-ReadoutPlacement -Placement $candidates[0] -Bounds $bounds
+  }
+
+  $Window.Left = [double]$chosen.Left
+  $Window.Top = [double]$chosen.Top
 }
 
 function Set-ReadoutWindowNearPoint {

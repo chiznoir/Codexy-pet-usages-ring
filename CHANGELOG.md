@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.14
+
+### Added
+
+- Added release announcement output to the release harness with separate Korean and English text blocks generated from the current changelog entry.
+- Added deployment validation that fails the release if local reward or settings state files are included in the deploy package.
+
+### Changed
+
+- Repositioned the reward bag and reward picker popovers below their HUD anchors so they avoid covering the pet, counter, and other HUD elements.
+- Kept deployment defaults locked by verifying release packages do not include inventory unlock state and keep gamification disabled by default.
+
+### Fixed
+
+- Fixed stale fully unlocked local test state from leaking into the deployment folder or release zip.
+- Fixed reward bag popover placement so it no longer opens to the side over nearby HUD controls.
+
 ## 0.1.13
 
 ### Changed
