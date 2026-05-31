@@ -34,6 +34,7 @@ $script:CodexPetRequiredFreshFiles = @(
   "Uninstall.bat",
   "settings/index.html",
   "assets/runtime/reward-chest.png",
+  "assets/runtime/reward-chest-ready.png",
   "assets/runtime/inventory-snack.png",
   "assets/runtime/inventory-gem.png",
   "assets/runtime/inventory-ticket.png",
@@ -69,6 +70,7 @@ function Test-CodexPetReleasePathExcluded {
   if ($normalized -in @(
     "gamification.json",
     "settings.json",
+    "assets/runtime/reward-chest-ready-source.png",
     "assets/runtime/inventory-items-source.png",
     "assets/runtime/cosmetic-unlocks-source.png",
     "assets/runtime/theme-forest-border-source.png",

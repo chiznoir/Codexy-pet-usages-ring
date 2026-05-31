@@ -446,9 +446,12 @@ $SettingsPath = [System.IO.Path]::GetFullPath($SettingsPath)
 $SettingsDefaultsPath = Join-Path $ProjectRoot "settings.defaults.json"
 $PetGrowthScriptPath = Join-Path $ProjectRoot "src\PetGrowth.ps1"
 $RewardChestIconPath = Join-Path $ProjectRoot "assets\runtime\reward-chest.png"
+$RewardChestReadyIconPath = Join-Path $ProjectRoot "assets\runtime\reward-chest-ready.png"
 $CosmeticThemeKeys = @("themeForest", "themeArcane", "themeRoyal", "themeCyber", "themeCelestial")
 $CosmeticEffectKeys = @("effectPawBurst", "effectBearPaw", "effectDogPaw")
 $CosmeticUnlockKeys = @("fontPixel", "fontTerminal") + $CosmeticThemeKeys + $CosmeticEffectKeys
+$RewardChestCost = 1000
+$RewardChestCooldownMinutes = 10
 $ThemeBorderPaths = @{
   themeForest = Join-Path $ProjectRoot "assets\runtime\theme-forest-border.png"
   themeArcane = Join-Path $ProjectRoot "assets\runtime\theme-arcane-border.png"
@@ -532,6 +535,10 @@ $script:LastKeyBurstAt = [datetime]::MinValue
 $script:LastPawBurstAt = [datetime]::MinValue
 $script:PawBurstImageSource = $null
 $script:PawBurstImageSources = @{}
+$script:KeyHeatSegments = @()
+$script:InventoryChargeSegments = @()
+$script:LastKeyHeatSignature = ""
+$script:LastInventoryChargeSignature = ""
 $script:LastKeyCounterDigits = 1
 $script:LastKeyCounterVisualSignature = ""
 $script:LastKeyCounterIdleSyncAt = [datetime]::MinValue
@@ -547,6 +554,10 @@ $script:InventoryItemLabelBlocks = @{}
 $script:InventoryItemCountBlocks = @{}
 $script:InventoryItemBorders = @{}
 $script:InventoryPickerKind = ""
+$script:InventoryClaimButton = $null
+$script:InventoryClaimButtonLabel = $null
+$script:InventoryReadyIcon = $null
+$script:InventoryLastClaimMessage = ""
 $script:HudCenterX = $null
 $script:HudRingSize = $null
 $script:Style = [ordered]@{
@@ -580,6 +591,8 @@ $script:Style = [ordered]@{
   ShowGrowthHoverReadout = $true
   ShowKeyCounter = $true
   ShowKeyEffects = $true
+  ShowComboHeat = $true
+  ShowRewardCharge = $true
 }
 $script:RingsEnabled = $true
 
@@ -617,6 +630,10 @@ function New-RuntimeImageSource {
 
 function New-RewardChestImageSource {
   return New-RuntimeImageSource -Path $RewardChestIconPath -Name "Reward chest" -DecodePixelWidth 64
+}
+
+function New-RewardChestReadyImageSource {
+  return New-RuntimeImageSource -Path $RewardChestReadyIconPath -Name "Reward chest ready" -DecodePixelWidth 64
 }
 
 function Get-ActiveThemeBorderPath {
@@ -737,6 +754,8 @@ function Ensure-SettingsFile {
       showHoverReadout = $true
       showKeyCounter = $true
       showKeyEffects = $true
+      showComboHeat = $true
+      showRewardCharge = $true
     }
   }
   ($fallback | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $SettingsPath -Encoding UTF8
@@ -835,6 +854,8 @@ function Update-StyleFromSettings {
     $script:Style.ShowGrowthHoverReadout = Convert-SettingBool (Get-PropertyValue $gamification "showHoverReadout" $null) $true
     $script:Style.ShowKeyCounter = Convert-SettingBool (Get-PropertyValue $gamification "showKeyCounter" $null) $true
     $script:Style.ShowKeyEffects = Convert-SettingBool (Get-PropertyValue $gamification "showKeyEffects" $null) $true
+    $script:Style.ShowComboHeat = Convert-SettingBool (Get-PropertyValue $gamification "showComboHeat" $null) $true
+    $script:Style.ShowRewardCharge = Convert-SettingBool (Get-PropertyValue $gamification "showRewardCharge" $null) $true
     $script:SettingsLastWriteTimeUtc = $item.LastWriteTimeUtc
     return $true
   } catch {
@@ -930,6 +951,12 @@ function Apply-StyleSettings {
   if ($null -ne $script:InventoryReadoutHint) {
     $script:InventoryReadoutHint.Foreground = New-StyleBrush ([byte][Math]::Max(112, [Math]::Min(255, [int]$script:Style.ReadoutTextOpacity - 38))) ([int[]]$script:Style.ReadoutTextRgb)
   }
+  if ($null -ne $script:InventoryClaimButton) {
+    $script:InventoryClaimButton.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+  }
+  if ($null -ne $script:InventoryClaimButtonLabel) {
+    $script:InventoryClaimButtonLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
+  }
   foreach ($countBlock in $script:InventoryItemCountBlocks.Values) {
     $countBlock.Foreground = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
   }
@@ -940,6 +967,7 @@ function Apply-StyleSettings {
   if ($null -ne $script:KeyCounterAccent) {
     $script:KeyCounterAccent.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
   }
+  Update-KeyHeatVisuals -Force
   if ($null -ne $script:KeyCounterLabel) {
     $script:KeyCounterLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
   }
@@ -954,6 +982,7 @@ function Apply-StyleSettings {
   if ($null -ne $script:InventoryCountBackground) {
     $script:InventoryCountBackground.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
   }
+  Update-InventoryChargeVisuals -Force
   if ($null -ne $script:InventoryLabel) {
     $script:InventoryLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
   }
@@ -1913,6 +1942,7 @@ function Update-ModeShapeVisibility {
     }
   }
   if ($null -ne $script:KeyCounterAccent) { $script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Collapsed }
+  Update-KeyHeatVisuals
   $inventoryVisibility = if (
     $script:RingVisualsVisible -and
     (Test-InventoryHudVisible)
@@ -1924,6 +1954,17 @@ function Update-ModeShapeVisibility {
   foreach ($shape in @($script:InventoryIcon, $script:InventoryCountBackground, $script:InventoryLabel)) {
     if ($null -ne $shape) { $shape.Visibility = $inventoryVisibility }
   }
+  if ($null -ne $script:InventoryReadyIcon) {
+    $script:InventoryReadyIcon.Visibility = if (
+      $script:RingVisualsVisible -and
+      (Test-RewardChestReadyIconVisible)
+    ) {
+      [System.Windows.Visibility]::Visible
+    } else {
+      [System.Windows.Visibility]::Collapsed
+    }
+  }
+  Update-InventoryChargeVisuals
 }
 
 function Get-PetGrowthBrush {
@@ -1959,6 +2000,171 @@ function Test-KeyCounterHudVisible {
 
 function Test-InventoryHudVisible {
   return ((Test-KeyCounterHudVisible) -and [string]$script:Style.DisplayMode -ne "badge")
+}
+
+function Test-ComboHeatVisible {
+  return ((Test-KeyCounterHudVisible) -and [bool]$script:Style.ShowComboHeat)
+}
+
+function Test-RewardChargeVisible {
+  return ((Test-InventoryHudVisible) -and [bool]$script:Style.ShowRewardCharge)
+}
+
+function Get-RewardKeyBalance {
+  $inventory = Get-InventoryState
+  try { return [Math]::Max(0, [int]$inventory.rewardKeys) } catch { return 0 }
+}
+
+function Get-RewardCooldownUntil {
+  $inventory = Get-InventoryState
+  try {
+    if ($null -eq $inventory.rewardCooldownUntil) { return $null }
+    $value = [datetime]$inventory.rewardCooldownUntil
+    if ($value -le (Get-Date)) { return $null }
+    return $value
+  } catch {
+    return $null
+  }
+}
+
+function Test-RewardChestCooldownActive {
+  return ($null -ne (Get-RewardCooldownUntil))
+}
+
+function Get-RewardCooldownMinutesRemaining {
+  $until = Get-RewardCooldownUntil
+  if ($null -eq $until) { return 0 }
+  return [Math]::Max(1, [int][Math]::Ceiling(($until - (Get-Date)).TotalMinutes))
+}
+
+function Get-ClaimableRewardChestCount {
+  if (Test-RewardChestCooldownActive) { return 0 }
+  return [Math]::Max(0, [int][Math]::Floor([double](Get-RewardKeyBalance) / [double]$RewardChestCost))
+}
+
+function Test-RewardChestPrizeAvailable {
+  $inventory = Get-InventoryState
+  return ((Get-InventoryUnlockCount -Inventory $inventory) -lt $CosmeticUnlockKeys.Count)
+}
+
+function Test-RewardChestReadyIconVisible {
+  return (
+    (Test-InventoryHudVisible) -and
+    -not (Test-RewardChestCooldownActive) -and
+    (Get-ClaimableRewardChestCount) -gt 0
+  )
+}
+
+function Get-KeyHeatLevel {
+  if (-not (Test-ComboHeatVisible)) { return 0 }
+  $comboCount = [int]$script:KeyComboCount
+  if ($comboCount -le 0) { return 0 }
+  if ($comboCount -ge 70) { return 5 }
+  $multiplier = [int]$script:KeyComboMultiplier
+  if ($multiplier -ge 5) { return 5 }
+  if ($multiplier -ge 4) { return 4 }
+  if ($multiplier -ge 3) { return 3 }
+  if ($multiplier -ge 2) { return 2 }
+  return 1
+}
+
+function Get-RewardChargeLevel {
+  if (-not (Test-RewardChargeVisible)) { return 0 }
+  $progress = Get-RewardKeyBalance
+  if ($progress -le 0) { return 0 }
+  if ($progress -ge [int]$RewardChestCost) { return 5 }
+  return [Math]::Max(1, [Math]::Min(5, [int][Math]::Ceiling([double]$progress / ([double]$RewardChestCost / 5.0))))
+}
+
+function Set-HudSegmentBounds {
+  param(
+    [object[]]$Segments,
+    [double]$X,
+    [double]$Y,
+    [double]$Size,
+    [double]$Gap
+  )
+  for ($i = 0; $i -lt $Segments.Count; $i++) {
+    $segment = $Segments[$i]
+    if ($null -eq $segment) { continue }
+    Set-RectangleBounds $segment $X ($Y + ([double]$i * ($Size + $Gap))) $Size $Size
+  }
+}
+
+function Update-KeyHeatVisuals {
+  param([switch]$Force)
+  $visible = (
+    [bool]$script:RingVisualsVisible -and
+    (Test-ComboHeatVisible) -and
+    $null -ne $script:KeyCounterBounds
+  )
+  $level = if ($visible) { Get-KeyHeatLevel } else { 0 }
+  $accentRgb = [int[]](Get-CosmeticAccentRgb)
+  $trackRgb = [int[]]$script:Style.TrackRgb
+  $signature = "{0}|{1}|{2}|{3}|{4}|{5}" -f `
+    $visible,
+    $level,
+    ($accentRgb -join ","),
+    ($trackRgb -join ","),
+    ([int]$script:Style.PrimaryOpacity),
+    ([int]$script:Style.TrackOpacity)
+  if (-not $Force -and $signature -eq [string]$script:LastKeyHeatSignature) { return }
+  $script:LastKeyHeatSignature = $signature
+  if (-not $visible) {
+    foreach ($segment in $script:KeyHeatSegments) {
+      if ($null -ne $segment) { $segment.Visibility = [System.Windows.Visibility]::Collapsed }
+    }
+    return
+  }
+
+  $activeBrush = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) $accentRgb
+  $inactiveBrush = New-StyleBrush ([byte][Math]::Max(34, [Math]::Min(120, [int]$script:Style.TrackOpacity + 52))) $trackRgb
+  for ($i = 0; $i -lt $script:KeyHeatSegments.Count; $i++) {
+    $segment = $script:KeyHeatSegments[$i]
+    if ($null -eq $segment) { continue }
+    $isActive = ($i + 1) -le $level
+    $segment.Fill = if ($isActive) { $activeBrush } else { $inactiveBrush }
+    $segment.Opacity = if ($isActive) { 0.95 } else { 0.42 }
+    $segment.Visibility = [System.Windows.Visibility]::Visible
+  }
+}
+
+function Update-InventoryChargeVisuals {
+  param([switch]$Force)
+  $visible = (
+    [bool]$script:RingVisualsVisible -and
+    (Test-RewardChargeVisible) -and
+    $null -ne $script:InventoryHitBounds
+  )
+  $level = if ($visible) { Get-RewardChargeLevel } else { 0 }
+  $accentRgb = [int[]](Get-CosmeticAccentRgb)
+  $trackRgb = [int[]]$script:Style.TrackRgb
+  $signature = "{0}|{1}|{2}|{3}|{4}|{5}" -f `
+    $visible,
+    $level,
+    ($accentRgb -join ","),
+    ($trackRgb -join ","),
+    ([int]$script:Style.PrimaryOpacity),
+    ([int]$script:Style.TrackOpacity)
+  if (-not $Force -and $signature -eq [string]$script:LastInventoryChargeSignature) { return }
+  $script:LastInventoryChargeSignature = $signature
+  if (-not $visible) {
+    foreach ($segment in $script:InventoryChargeSegments) {
+      if ($null -ne $segment) { $segment.Visibility = [System.Windows.Visibility]::Collapsed }
+    }
+    return
+  }
+
+  $activeBrush = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) $accentRgb
+  $inactiveBrush = New-StyleBrush ([byte][Math]::Max(34, [Math]::Min(120, [int]$script:Style.TrackOpacity + 52))) $trackRgb
+  for ($i = 0; $i -lt $script:InventoryChargeSegments.Count; $i++) {
+    $segment = $script:InventoryChargeSegments[$i]
+    if ($null -eq $segment) { continue }
+    $isActive = ($i + 1) -le $level
+    $segment.Fill = if ($isActive) { $activeBrush } else { $inactiveBrush }
+    $segment.Opacity = if ($isActive) { 0.95 } else { 0.36 }
+    $segment.Visibility = [System.Windows.Visibility]::Visible
+  }
 }
 
 function Get-GrowthChipWidth {
@@ -2177,8 +2383,14 @@ function Apply-CosmeticUnlockVisuals {
   if ($null -ne $script:KeyCounterAccent) {
     $script:KeyCounterAccent.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$accent)
   }
+  Update-KeyHeatVisuals -Force
+  Update-InventoryChargeVisuals -Force
   foreach ($count in $script:InventoryItemCountBlocks.Values) {
     $count.Foreground = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$accent)
+  }
+  if ($null -ne $script:InventoryClaimButton) {
+    $script:InventoryClaimButton.Background = New-StyleBrush 126 ([int[]]$accent)
+    $script:InventoryClaimButton.BorderBrush = New-StyleBrush 210 ([int[]]$accent)
   }
   foreach ($target in @($script:KeyCounterLabel, $script:InventoryLabel, $script:InventoryReadoutTitle)) {
     if ($null -ne $target) {
@@ -2193,6 +2405,9 @@ function Get-InventoryHudWidth {
 
 function Get-InventoryHudText {
   $inventory = Get-InventoryState
+  if (Test-RewardChestCooldownActive) { return "CD" }
+  $claimable = Get-ClaimableRewardChestCount
+  if ($claimable -gt 0) { return "{0}" -f $claimable }
   $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
   if ($totalDrops -gt 99) { return "99+" }
   return "{0}" -f $totalDrops
@@ -2207,6 +2422,12 @@ function Get-InventoryUiText {
       "EmptyHint" { return (Expand-UnicodeText "\uD76C\uADC0 \uD574\uAE08\uC740 \uB9E4\uC6B0 \uB4DC\uBB3C\uAC8C \uB4F1\uC7A5\uD574\uC694") }
       "Drops" { return (Expand-UnicodeText "\uD574\uAE08 {0}") }
       "Keys" { return (Expand-UnicodeText "\uB204\uC801 \uD0A4 {0}") }
+      "ClaimReady" { return (Expand-UnicodeText "\uC0C1\uC790 \uC900\uBE44\uB428 {0}\uAC1C") }
+      "ClaimProgress" { return (Expand-UnicodeText "\uC0C1\uC790 \uCDA9\uC804 {0}/{1}") }
+      "OpenChest" { return (Expand-UnicodeText "\uC0C1\uC790 \uC5F4\uAE30 (-1000)") }
+      "Cooldown" { return (Expand-UnicodeText "\uCFFC\uD0C0\uC784 {0}\uBD84") }
+      "AllUnlocked" { return (Expand-UnicodeText "\uBAA8\uB4E0 \uBCF4\uC0C1 \uD574\uAE08\uB428") }
+      "Claimed" { return (Expand-UnicodeText "\uD68D\uB4DD {0}") }
       "Last" { return (Expand-UnicodeText "\uB9C8\uC9C0\uB9C9 {0}") }
       "None" { return (Expand-UnicodeText "\uC5C6\uC74C") }
       "Locked" { return (Expand-UnicodeText "\uC7A0\uAE40") }
@@ -2237,6 +2458,12 @@ function Get-InventoryUiText {
       "EmptyHint" { return (Expand-UnicodeText "\u30EC\u30A2\u89E3\u653E\u306F\u3068\u3066\u3082\u4F4E\u78BA\u7387\u3067\u3059") }
       "Drops" { return (Expand-UnicodeText "\u89E3\u653E {0}") }
       "Keys" { return (Expand-UnicodeText "\u7D2F\u8A08\u30AD\u30FC {0}") }
+      "ClaimReady" { return "Chest ready {0}" }
+      "ClaimProgress" { return "Chest charge {0}/{1}" }
+      "OpenChest" { return "Open Chest (-1000)" }
+      "Cooldown" { return "Cooldown {0}m" }
+      "AllUnlocked" { return "All rewards unlocked" }
+      "Claimed" { return "Claimed {0}" }
       "Last" { return (Expand-UnicodeText "\u6700\u5F8C {0}") }
       "None" { return (Expand-UnicodeText "\u306A\u3057") }
       "Locked" { return (Expand-UnicodeText "\u672A\u89E3\u653E") }
@@ -2267,6 +2494,12 @@ function Get-InventoryUiText {
       "EmptyHint" { return (Expand-UnicodeText "\u7A00\u6709\u89E3\u9501\u4F1A\u4EE5\u5F88\u4F4E\u6982\u7387\u51FA\u73B0") }
       "Drops" { return (Expand-UnicodeText "\u89E3\u9501 {0}") }
       "Keys" { return (Expand-UnicodeText "\u7D2F\u8BA1\u6309\u952E {0}") }
+      "ClaimReady" { return "Chest ready {0}" }
+      "ClaimProgress" { return "Chest charge {0}/{1}" }
+      "OpenChest" { return "Open Chest (-1000)" }
+      "Cooldown" { return "Cooldown {0}m" }
+      "AllUnlocked" { return "All rewards unlocked" }
+      "Claimed" { return "Claimed {0}" }
       "Last" { return (Expand-UnicodeText "\u6700\u540E {0}") }
       "None" { return (Expand-UnicodeText "\u65E0") }
       "Locked" { return (Expand-UnicodeText "\u672A\u89E3\u9501") }
@@ -2296,6 +2529,12 @@ function Get-InventoryUiText {
     "EmptyHint" { return "Rare unlocks drop at a very low chance" }
     "Drops" { return "Unlocks {0}" }
     "Keys" { return "Keys {0}" }
+    "ClaimReady" { return "Chest ready {0}" }
+    "ClaimProgress" { return "Chest charge {0}/{1}" }
+    "OpenChest" { return "Open Chest (-1000)" }
+    "Cooldown" { return "Cooldown {0}m" }
+    "AllUnlocked" { return "All rewards unlocked" }
+    "Claimed" { return "Claimed {0}" }
     "Last" { return "Last {0}" }
     "None" { return "None" }
     "Locked" { return "Locked" }
@@ -2355,14 +2594,29 @@ function Set-ActiveInventoryUnlock {
   Update-PetFrame
 }
 
+function Get-RewardChestStatusText {
+  if (Test-RewardChestCooldownActive) {
+    return ((Get-InventoryUiText -Key "Cooldown") -f (Get-RewardCooldownMinutesRemaining))
+  }
+  if (-not (Test-RewardChestPrizeAvailable)) {
+    return (Get-InventoryUiText -Key "AllUnlocked")
+  }
+  $claimable = Get-ClaimableRewardChestCount
+  if ($claimable -gt 0) {
+    return ((Get-InventoryUiText -Key "ClaimReady") -f $claimable)
+  }
+  return ((Get-InventoryUiText -Key "ClaimProgress") -f (Get-RewardKeyBalance), ([int]$RewardChestCost))
+}
+
 function Get-InventoryReadoutText {
   $inventory = Get-InventoryState
   $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
   $totalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
   $lastItem = Get-DropItemLabel -Item ([string]$inventory.lastDropItem)
   if ([string]::IsNullOrWhiteSpace($lastItem)) { $lastItem = Get-InventoryUiText -Key "None" }
-  return "{0}`n{1}`n{2}  {3}" -f `
+  return "{0}`n{1}`n{2}`n{3}  {4}" -f `
     (Get-InventoryUiText -Key "Title"),
+    (Get-RewardChestStatusText),
     ((Get-InventoryUiText -Key "Drops") -f $totalDrops),
     ((Get-InventoryUiText -Key "Keys") -f $totalKeys),
     ((Get-InventoryUiText -Key "Last") -f $lastItem)
@@ -2414,6 +2668,9 @@ function Update-InventoryReadoutContent {
 
   $totalDrops = Get-InventoryUnlockCount -Inventory $inventory
   $totalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
+  $rewardStatus = Get-RewardChestStatusText
+  $claimable = Get-ClaimableRewardChestCount
+  $canClaim = ($claimable -gt 0 -and (Test-RewardChestPrizeAvailable) -and -not (Test-RewardChestCooldownActive))
   $lastItem = Get-DropItemLabel -Item ([string]$inventory.lastDropItem)
   if ([string]::IsNullOrWhiteSpace($lastItem)) { $lastItem = Get-InventoryUiText -Key "None" }
 
@@ -2421,21 +2678,42 @@ function Update-InventoryReadoutContent {
     $script:InventoryReadoutTitle.Text = Get-InventoryUiText -Key "Title"
   }
   if ($null -ne $script:InventoryReadoutHint) {
-    $script:InventoryReadoutHint.Text = if ($totalDrops -gt 0) {
+    $script:InventoryReadoutHint.Text = if (-not [string]::IsNullOrWhiteSpace([string]$script:InventoryLastClaimMessage)) {
+      [string]$script:InventoryLastClaimMessage
+    } elseif ($canClaim -or (Test-RewardChestCooldownActive)) {
+      $rewardStatus
+    } elseif ($totalDrops -gt 0) {
       ((Get-InventoryUiText -Key "Last") -f $lastItem)
     } else {
       Get-InventoryUiText -Key "EmptyHint"
     }
   }
+  if ($null -ne $script:InventoryClaimButton) {
+    $claimButtonText = if ($canClaim) {
+      Get-InventoryUiText -Key "OpenChest"
+    } else {
+      $rewardStatus
+    }
+    if ($null -ne $script:InventoryClaimButtonLabel) {
+      $script:InventoryClaimButtonLabel.Text = $claimButtonText
+    } else {
+      $script:InventoryClaimButton.Content = $claimButtonText
+    }
+    $script:InventoryClaimButton.IsEnabled = $canClaim
+    $script:InventoryClaimButton.Opacity = if ($canClaim) { 1.0 } else { 0.58 }
+    $script:InventoryClaimButton.Cursor = if ($canClaim) { [System.Windows.Input.Cursors]::Hand } else { [System.Windows.Input.Cursors]::Arrow }
+  }
   if ($null -ne $script:InventoryReadoutStats) {
-    $script:InventoryReadoutStats.Text = "{0}  {1}" -f `
+    $script:InventoryReadoutStats.Text = "{0}  {1}  {2}" -f `
       ((Get-InventoryUiText -Key "Drops") -f $totalDrops),
-      ((Get-InventoryUiText -Key "Keys") -f $totalKeys)
+      ((Get-InventoryUiText -Key "Keys") -f $totalKeys),
+      $rewardStatus
   }
   if ($null -ne $script:InventoryReadoutText) {
     $script:InventoryReadoutText.Text = Get-InventoryReadoutText
   }
   Apply-CosmeticUnlockVisuals
+  Update-InventoryChargeVisuals -Force
 }
 
 function Get-RandomDropItem {
@@ -2483,25 +2761,39 @@ function Add-InventoryDrop {
   $oldTotalKeys = [Math]::Max(0, [int]$inventory.totalKeys)
   $newTotalKeys = $oldTotalKeys + [Math]::Max(0, [int]$Delta)
   $inventory.totalKeys = $newTotalKeys
-  $oldBucket = [Math]::Floor($oldTotalKeys / 100.0)
-  $newBucket = [Math]::Floor($newTotalKeys / 100.0)
-  if ($newBucket -le $oldBucket) {
-    Save-PetGrowthState
+  $inventory.rewardKeysMigrated = 2
+  if (-not (Test-RewardChestCooldownActive)) { $inventory.rewardCooldownUntil = $null }
+  $inventory.rewardKeys = [Math]::Max(0, [int]$inventory.rewardKeys) + [Math]::Max(0, [int]$Delta)
+  Save-PetGrowthState
+  return $null
+}
+
+function Invoke-RewardChestClaim {
+  $inventory = Get-InventoryState
+  $script:InventoryLastClaimMessage = ""
+  if (Test-RewardChestCooldownActive) {
+    $script:InventoryLastClaimMessage = Get-RewardChestStatusText
     return $null
   }
-
-  $inventory.rewardRolls = [Math]::Max(0, [int]$inventory.rewardRolls) + ([int]$newBucket - [int]$oldBucket)
-  $roll = Get-Random -Minimum 1 -Maximum 1001
-  if ($roll -gt 25) {
-    Save-PetGrowthState
+  if ((Get-RewardKeyBalance) -lt [int]$RewardChestCost) {
+    $script:InventoryLastClaimMessage = Get-RewardChestStatusText
+    return $null
+  }
+  if (-not (Test-RewardChestPrizeAvailable)) {
+    $script:InventoryLastClaimMessage = Get-InventoryUiText -Key "AllUnlocked"
     return $null
   }
 
   $item = Get-RandomDropItem
   if ([string]::IsNullOrWhiteSpace($item)) {
-    Save-PetGrowthState
+    $script:InventoryLastClaimMessage = Get-InventoryUiText -Key "AllUnlocked"
     return $null
   }
+
+  $inventory.rewardKeys = [Math]::Max(0, (Get-RewardKeyBalance) - [int]$RewardChestCost)
+  $inventory.rewardKeysMigrated = 2
+  $inventory.rewardCooldownUntil = (Get-Date).AddMinutes([double]$RewardChestCooldownMinutes).ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
+  $inventory.rewardRolls = [Math]::Max(0, [int]$inventory.rewardRolls) + 1
   $inventory.$item = $true
   if ($item -like "font*") { $inventory.activeFont = $item }
   if ($item -like "theme*") { $inventory.activeTheme = $item }
@@ -2509,7 +2801,13 @@ function Add-InventoryDrop {
   $inventory.totalDrops = [Math]::Max(0, [int]$inventory.totalDrops) + 1
   $inventory.lastDropItem = $item
   $inventory.lastDropAt = (Get-Date).ToString("o", [System.Globalization.CultureInfo]::InvariantCulture)
+  $script:InventoryLastClaimMessage = ((Get-InventoryUiText -Key "Claimed") -f (Get-DropItemLabel -Item $item))
   Save-PetGrowthState -Force
+  Apply-CosmeticUnlockVisuals
+  Update-InventoryReadoutContent
+  Update-KeyCounterGeometry
+  Update-InventoryGeometry
+  Update-PetFrame
   return $item
 }
 
@@ -2616,6 +2914,37 @@ function Update-KeyCounterVisualText {
     }
     Set-KeyCounterBaseBorderVisibility
   }
+  Update-KeyHeatVisuals
+}
+
+function Update-KeyHeatGeometry {
+  if ($null -eq $script:KeyCounterBounds -or $script:KeyHeatSegments.Count -le 0) {
+    Update-KeyHeatVisuals -Force
+    return
+  }
+  $bounds = $script:KeyCounterBounds
+  $size = 3.4
+  $gap = 2.2
+  $totalHeight = ([double]$script:KeyHeatSegments.Count * $size) + ([double]([Math]::Max(0, $script:KeyHeatSegments.Count - 1)) * $gap)
+  $x = [double]$bounds.X + 5.0
+  $y = [double]$bounds.Y + [Math]::Max(4.0, (([double]$bounds.Height - $totalHeight) / 2.0))
+  Set-HudSegmentBounds -Segments $script:KeyHeatSegments -X $x -Y $y -Size $size -Gap $gap
+  Update-KeyHeatVisuals -Force
+}
+
+function Update-InventoryChargeGeometry {
+  if ($null -eq $script:InventoryHitBounds -or $script:InventoryChargeSegments.Count -le 0) {
+    Update-InventoryChargeVisuals -Force
+    return
+  }
+  $bounds = $script:InventoryHitBounds
+  $size = 3.4
+  $gap = 2.2
+  $totalHeight = ([double]$script:InventoryChargeSegments.Count * $size) + ([double]([Math]::Max(0, $script:InventoryChargeSegments.Count - 1)) * $gap)
+  $x = [double]$bounds.X + 3.0
+  $y = [double]$bounds.Y + [Math]::Max(4.0, (([double]$bounds.Height - $totalHeight) / 2.0))
+  Set-HudSegmentBounds -Segments $script:InventoryChargeSegments -X $x -Y $y -Size $size -Gap $gap
+  Update-InventoryChargeVisuals -Force
 }
 
 function Sync-KeyCounterIdleVisualState {
@@ -2942,9 +3271,13 @@ function Start-KeyCounterPulse {
 function Update-KeyCounterGeometry {
   if ($null -eq $script:Window -or $null -eq $script:LastPetRect) {
     $script:KeyCounterBounds = $null
+    Update-KeyHeatVisuals -Force
     return
   }
-  if ($null -eq $script:KeyCounterBackground -or $null -eq $script:KeyCounterLabel) { return }
+  if ($null -eq $script:KeyCounterBackground -or $null -eq $script:KeyCounterLabel) {
+    Update-KeyHeatVisuals -Force
+    return
+  }
 
   $mode = [string]$script:Style.DisplayMode
   $chipWidth = Get-KeyCounterChipWidth -Mode $mode
@@ -3001,6 +3334,7 @@ function Update-KeyCounterGeometry {
   $script:KeyCounterBackground.RadiusX = if ($mode -eq "badge") { 9.0 } else { 8.0 }
   $script:KeyCounterBackground.RadiusY = $script:KeyCounterBackground.RadiusX
   $script:KeyCounterBackground.StrokeThickness = 1.0
+  Update-KeyHeatGeometry
   Update-KeyCounterVisualText
   Update-ModeShapeVisibility
 }
@@ -3017,6 +3351,7 @@ function Update-InventoryGeometry {
     $script:InventoryBounds = $null
     $script:InventoryHitBounds = $null
     Set-InventoryHoverHighlight -Visible $false
+    Update-InventoryChargeVisuals -Force
     return
   }
 
@@ -3042,6 +3377,13 @@ function Update-InventoryGeometry {
   $script:InventoryIcon.Height = $iconSize
   [System.Windows.Controls.Canvas]::SetLeft($script:InventoryIcon, $iconX)
   [System.Windows.Controls.Canvas]::SetTop($script:InventoryIcon, $iconY)
+  if ($null -ne $script:InventoryReadyIcon) {
+    $readyIconSize = 20.0
+    $script:InventoryReadyIcon.Width = $readyIconSize
+    $script:InventoryReadyIcon.Height = $readyIconSize
+    [System.Windows.Controls.Canvas]::SetLeft($script:InventoryReadyIcon, $iconX + 24.0)
+    [System.Windows.Controls.Canvas]::SetTop($script:InventoryReadyIcon, $iconY + 2.0)
+  }
   Set-RectangleBounds $script:InventoryCountBackground $badgeX $badgeY $badgeWidth $badgeHeight
   $script:InventoryLabel.Text = Get-InventoryHudText
   $script:InventoryLabel.Width = $badgeWidth
@@ -3051,6 +3393,7 @@ function Update-InventoryGeometry {
   $script:InventoryBounds = [pscustomobject]@{ X = $x; Y = $y; Width = $chipWidth; Height = $chipHeight }
   $script:InventoryHitBounds = [pscustomobject]@{ X = ($iconX - 2.0); Y = ($iconY - 2.0); Width = 46.0; Height = 44.0 }
   Set-InventoryHoverHighlight -Visible (Test-InventoryReadoutOpen)
+  Update-InventoryChargeGeometry
   Update-ModeShapeVisibility
 }
 
@@ -3090,6 +3433,9 @@ function Update-KeyCounter {
   $burstCountSnapshot = [int]$script:KeyPressCount
   $rewardAndEffects = [Action]{
     $dropItem = Add-InventoryDrop -Delta $rewardDelta
+    Update-InventoryGeometry
+    if (Test-InventoryReadoutOpen) { Update-InventoryReadoutContent }
+    Update-InventoryChargeVisuals
     if (-not [string]::IsNullOrWhiteSpace([string]$dropItem)) {
       Apply-CosmeticUnlockVisuals
       Update-InventoryGeometry
@@ -4587,6 +4933,17 @@ $script:KeyCounterAccent.RadiusY = 2.5
 $script:KeyCounterAccent.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
 $script:KeyCounterAccent.Visibility = [System.Windows.Visibility]::Collapsed
 
+$script:KeyHeatSegments = @()
+for ($i = 0; $i -lt 5; $i++) {
+  $segment = [System.Windows.Shapes.Rectangle]::new()
+  $segment.RadiusX = 1.8
+  $segment.RadiusY = 1.8
+  $segment.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  $segment.Visibility = [System.Windows.Visibility]::Collapsed
+  $segment.IsHitTestVisible = $false
+  $script:KeyHeatSegments += $segment
+}
+
 $script:KeyCounterLabel = [System.Windows.Controls.TextBlock]::new()
 $script:KeyCounterLabel.Text = Get-KeyCounterText
 $script:KeyCounterLabel.Foreground = New-StyleBrush ([byte]$script:Style.ReadoutTextOpacity) ([int[]]$script:Style.ReadoutTextRgb)
@@ -4616,6 +4973,25 @@ $script:InventoryHoverBorder.StrokeThickness = 2.0
 $script:InventoryHoverBorder.Stroke = New-Brush 236 255 218 0
 $script:InventoryHoverBorder.Fill = New-Brush 22 255 218 0
 $script:InventoryHoverBorder.Visibility = [System.Windows.Visibility]::Collapsed
+
+$script:InventoryChargeSegments = @()
+for ($i = 0; $i -lt 5; $i++) {
+  $segment = [System.Windows.Shapes.Rectangle]::new()
+  $segment.RadiusX = 1.8
+  $segment.RadiusY = 1.8
+  $segment.Fill = New-StyleBrush ([byte]$script:Style.PrimaryOpacity) ([int[]]$script:Style.PrimaryRgb)
+  $segment.Visibility = [System.Windows.Visibility]::Collapsed
+  $segment.IsHitTestVisible = $false
+  $script:InventoryChargeSegments += $segment
+}
+
+$script:InventoryReadyIcon = [System.Windows.Controls.Image]::new()
+$script:InventoryReadyIcon.Source = New-RewardChestReadyImageSource
+$script:InventoryReadyIcon.Stretch = [System.Windows.Media.Stretch]::Uniform
+$script:InventoryReadyIcon.SnapsToDevicePixels = $true
+$script:InventoryReadyIcon.UseLayoutRounding = $true
+$script:InventoryReadyIcon.IsHitTestVisible = $false
+$script:InventoryReadyIcon.Visibility = [System.Windows.Visibility]::Collapsed
 
 $script:InventoryIcon = [System.Windows.Controls.Image]::new()
 $script:InventoryIcon.Source = New-RewardChestImageSource
@@ -4667,7 +5043,7 @@ $script:InventoryReadoutText.Visibility = [System.Windows.Visibility]::Collapsed
 
 $script:InventoryReadoutPanel = [System.Windows.Controls.StackPanel]::new()
 $script:InventoryReadoutPanel.Orientation = [System.Windows.Controls.Orientation]::Vertical
-$script:InventoryReadoutPanel.Width = 220.0
+$script:InventoryReadoutPanel.Width = 252.0
 
 $script:InventoryReadoutTitle = [System.Windows.Controls.TextBlock]::new()
 $script:InventoryReadoutTitle.Text = Get-InventoryUiText -Key "Title"
@@ -4682,8 +5058,40 @@ $script:InventoryReadoutHint.Text = Get-InventoryUiText -Key "EmptyHint"
 $script:InventoryReadoutHint.Foreground = New-Brush 190 220 236 244
 $script:InventoryReadoutHint.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
 $script:InventoryReadoutHint.FontSize = 9.5
-$script:InventoryReadoutHint.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
+$script:InventoryReadoutHint.TextWrapping = [System.Windows.TextWrapping]::Wrap
+$script:InventoryReadoutHint.TextTrimming = [System.Windows.TextTrimming]::None
 $script:InventoryReadoutHint.Margin = [System.Windows.Thickness]::new(3, 0, 3, 5)
+
+$script:InventoryClaimButton = [System.Windows.Controls.Button]::new()
+$script:InventoryClaimButton.Foreground = New-Brush 246 255 255 255
+$script:InventoryClaimButton.Background = New-StyleBrush 126 ([int[]](Get-CosmeticAccentRgb))
+$script:InventoryClaimButton.BorderBrush = New-StyleBrush 210 ([int[]](Get-CosmeticAccentRgb))
+$script:InventoryClaimButton.BorderThickness = [System.Windows.Thickness]::new(1.5)
+$script:InventoryClaimButton.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryClaimButton.FontSize = 11.0
+$script:InventoryClaimButton.FontWeight = [System.Windows.FontWeights]::Bold
+$script:InventoryClaimButton.Padding = [System.Windows.Thickness]::new(8, 4, 8, 5)
+$script:InventoryClaimButton.Margin = [System.Windows.Thickness]::new(3, 0, 3, 6)
+$script:InventoryClaimButton.Cursor = [System.Windows.Input.Cursors]::Hand
+$script:InventoryClaimButton.HorizontalContentAlignment = [System.Windows.HorizontalAlignment]::Stretch
+$script:InventoryClaimButtonLabel = [System.Windows.Controls.TextBlock]::new()
+$script:InventoryClaimButtonLabel.Text = Get-InventoryUiText -Key "OpenChest"
+$script:InventoryClaimButtonLabel.Foreground = New-Brush 246 255 255 255
+$script:InventoryClaimButtonLabel.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
+$script:InventoryClaimButtonLabel.FontSize = 11.0
+$script:InventoryClaimButtonLabel.FontWeight = [System.Windows.FontWeights]::Bold
+$script:InventoryClaimButtonLabel.TextAlignment = [System.Windows.TextAlignment]::Center
+$script:InventoryClaimButtonLabel.TextWrapping = [System.Windows.TextWrapping]::Wrap
+$script:InventoryClaimButtonLabel.TextTrimming = [System.Windows.TextTrimming]::None
+$script:InventoryClaimButton.Content = $script:InventoryClaimButtonLabel
+$script:InventoryClaimButton.Add_Click({
+  param($Sender, $EventArgs)
+  $item = Invoke-RewardChestClaim
+  if (-not [string]::IsNullOrWhiteSpace([string]$item) -and $script:RingVisualsVisible) {
+    Start-KeyBurstEffect -Count 1 -Tier 3 -MilestoneTier 1 -MilestoneText (Get-DropItemLabel -Item ([string]$item))
+  }
+  $EventArgs.Handled = $true
+}.GetNewClosure())
 
 $script:InventoryReadoutGrid = [System.Windows.Controls.Grid]::new()
 $script:InventoryReadoutGrid.Margin = [System.Windows.Thickness]::new(0, 0, 0, 5)
@@ -4714,10 +5122,13 @@ $script:InventoryReadoutStats.Foreground = New-Brush 202 220 236 244
 $script:InventoryReadoutStats.FontFamily = [System.Windows.Media.FontFamily]::new("Segoe UI")
 $script:InventoryReadoutStats.FontSize = 9.5
 $script:InventoryReadoutStats.FontWeight = [System.Windows.FontWeights]::SemiBold
+$script:InventoryReadoutStats.TextWrapping = [System.Windows.TextWrapping]::Wrap
+$script:InventoryReadoutStats.TextTrimming = [System.Windows.TextTrimming]::None
 $script:InventoryReadoutStats.Margin = [System.Windows.Thickness]::new(3, 0, 3, 0)
 
 $script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutTitle) | Out-Null
 $script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutHint) | Out-Null
+$script:InventoryReadoutPanel.Children.Add($script:InventoryClaimButton) | Out-Null
 $script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutGrid) | Out-Null
 $script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutStats) | Out-Null
 $script:InventoryReadoutPanel.Children.Add($script:InventoryReadoutText) | Out-Null
@@ -4829,10 +5240,13 @@ $script:Canvas.Children.Add($script:GrowthChipLabel) | Out-Null
 $script:Canvas.Children.Add($script:KeyCounterBackground) | Out-Null
 $script:Canvas.Children.Add($script:KeyCounterThemeBorder) | Out-Null
 $script:Canvas.Children.Add($script:KeyCounterAccent) | Out-Null
+foreach ($segment in $script:KeyHeatSegments) { $script:Canvas.Children.Add($segment) | Out-Null }
 $script:Canvas.Children.Add($script:KeyCounterLabel) | Out-Null
 $script:Canvas.Children.Add($script:InventoryBackground) | Out-Null
 $script:Canvas.Children.Add($script:InventoryHoverBorder) | Out-Null
 $script:Canvas.Children.Add($script:InventoryIcon) | Out-Null
+if ($null -ne $script:InventoryReadyIcon) { $script:Canvas.Children.Add($script:InventoryReadyIcon) | Out-Null }
+foreach ($segment in $script:InventoryChargeSegments) { $script:Canvas.Children.Add($segment) | Out-Null }
 $script:Canvas.Children.Add($script:InventoryCountBackground) | Out-Null
 $script:Canvas.Children.Add($script:InventoryLabel) | Out-Null
 Set-RingVisualsVisible -Visible $false

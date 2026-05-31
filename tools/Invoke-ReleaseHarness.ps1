@@ -389,6 +389,36 @@ function Convert-ChangelogBulletKo {
     "Fixed batched typing effects from delaying the next visible key count update." {
       return "배치로 몰린 타이핑 이펙트가 다음 키 카운트 표시 갱신을 늦추던 문제를 수정했습니다."
     }
+    "Added low-cost combo heat and reward charge meters to the gamification HUD, with settings toggles for each." {
+      return "게이미피케이션 HUD에 저비용 콤보 열기 게이지와 보상 충전 게이지를 추가하고, 설정에서 각각 토글할 수 있게 했습니다."
+    }
+    "Added a 1000-key reward chest claim button in the reward popover, with a 10-minute cooldown after each claim." {
+      return "보상 팝오버에 1000키 충전 상자 열기 버튼을 추가하고, 상자를 연 뒤에는 10분 쿨다운이 걸리도록 했습니다."
+    }
+    "Added a generated ready-state chest icon that appears on the HUD when a reward chest can be opened." {
+      return "보상 상자를 열 수 있을 때 HUD에 표시되는 생성형 ready 상자 아이콘을 추가했습니다."
+    }
+    "Added an interactive settings sidebar with section-aware navigation for General, Growth, Rewards, Presets, Colors, Readout, Opacity, and Motion." {
+      return "일반, 성장, 보상, 프리셋, 색상, 읽기 표시, 투명도, 모션 섹션을 빠르게 이동할 수 있는 인터랙티브 설정 사이드바를 추가했습니다."
+    }
+    "Kept the new meters event-driven and fixed-size so typing feedback stays responsive without adding new polling timers." {
+      return "새 게이지를 이벤트 기반과 고정 크기 구조로 유지해 추가 polling 타이머 없이 타이핑 피드백 반응성을 지켰습니다."
+    }
+    "Changed reward drops to roll only when the user opens a charged chest, deducting 1000 stored key points instead of resetting the counter." {
+      return "보상 드랍은 충전된 상자를 열 때만 굴러가도록 바꾸고, 카운터를 0으로 초기화하지 않고 저장된 키 포인트에서 1000만 차감하게 했습니다."
+    }
+    "Wrapped reward popover status/button text so Korean and long charge values do not get clipped." {
+      return "한국어 문구와 긴 충전값이 잘리지 않도록 보상 팝오버 상태/버튼 텍스트를 줄바꿈 처리했습니다."
+    }
+    "Reworked the settings page from a pixel hero layout into a compact settings app with a left navigation rail, single-column control flow, and sticky HUD preview." {
+      return "설정 페이지를 픽셀 hero 레이아웃에서 좌측 네비게이션, 단일 흐름 컨트롤, 고정 HUD 미리보기를 갖춘 compact 설정 앱 구조로 재정리했습니다."
+    }
+    "Migrated already-typed key totals into the new reward charge bank so existing 1000+ users can see the ready chest icon immediately." {
+      return "이미 누적된 타자 수를 새 보상 충전값으로 마이그레이션해 1000회 이상 사용자는 바로 ready 상자 아이콘을 볼 수 있게 했습니다."
+    }
+    "Kept the ready chest icon tied to the 1000-key charge state so fully unlocked test inventories still show that the chest is charged." {
+      return "테스트 인벤토리가 전체 해금 상태여도 1000키 충전 상태 자체는 ready 상자 아이콘으로 표시되게 했습니다."
+    }
     default {
       return $Bullet
     }

@@ -113,6 +113,9 @@ function New-PetGrowthState {
       rewardRolls = 0
       totalDrops = 0
       totalKeys = 0
+      rewardKeys = 0
+      rewardKeysMigrated = 2
+      rewardCooldownUntil = $null
       lastDropAt = $null
       lastDropItem = ""
     }
@@ -195,6 +198,20 @@ function Normalize-PetGrowthState {
   }
   $rewardRolls = [Math]::Max(0, [int][double](& $get $inventory "rewardRolls" 0))
   if ($cosmeticDropCount -le 0) { $rewardRolls = 0 }
+  $totalKeys = [Math]::Max(0, [int][double](& $get $inventory "totalKeys" 0))
+  $rewardKeysMigrated = [Math]::Max(0, [int][double](& $get $inventory "rewardKeysMigrated" 0))
+  $rewardKeysRaw = & $get $inventory "rewardKeys" $null
+  $rewardKeysBase = if ($null -eq $rewardKeysRaw) { 0 } else { [int][double]$rewardKeysRaw }
+  $rewardChestCost = 1000
+  $rewardKeys = if ($rewardKeysMigrated -lt 2) {
+    $historicSpentKeys = [Math]::Max(0, [int]$rewardRolls) * $rewardChestCost
+    $historicRewardKeys = [Math]::Max(0, $totalKeys - $historicSpentKeys)
+    [Math]::Max($historicRewardKeys, [Math]::Max(0, $rewardKeysBase))
+  } else {
+    [Math]::Max(0, $rewardKeysBase)
+  }
+  $rewardCooldownUntil = ConvertTo-PetGrowthDateTime (& $get $inventory "rewardCooldownUntil" $null)
+  if ($null -ne $rewardCooldownUntil -and $rewardCooldownUntil -le $Now) { $rewardCooldownUntil = $null }
 
   return [PSCustomObject][ordered]@{
     version = 1
@@ -230,7 +247,10 @@ function Normalize-PetGrowthState {
       activeEffect = $activeEffect
       rewardRolls = $rewardRolls
       totalDrops = $cosmeticDropCount
-      totalKeys = [Math]::Max(0, [int][double](& $get $inventory "totalKeys" 0))
+      totalKeys = $totalKeys
+      rewardKeys = $rewardKeys
+      rewardKeysMigrated = 2
+      rewardCooldownUntil = $rewardCooldownUntil
       lastDropAt = $lastDropAt
       lastDropItem = $lastDropItem
     }

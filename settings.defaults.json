@@ -40,6 +40,8 @@
     "showGrowthChip": true,
     "showHoverReadout": true,
     "showKeyCounter": true,
-    "showKeyEffects": true
+    "showKeyEffects": true,
+    "showComboHeat": true,
+    "showRewardCharge": true
   }
 }

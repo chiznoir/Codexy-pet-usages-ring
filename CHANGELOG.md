@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.17
+
+### Added
+
+- Added low-cost combo heat and reward charge meters to the gamification HUD, with settings toggles for each.
+- Added a 1000-key reward chest claim button in the reward popover, with a 10-minute cooldown after each claim.
+- Added a generated ready-state chest icon that appears on the HUD when a reward chest can be opened.
+- Added an interactive settings sidebar with section-aware navigation for General, Growth, Rewards, Presets, Colors, Readout, Opacity, and Motion.
+
+### Changed
+
+- Kept the new meters event-driven and fixed-size so typing feedback stays responsive without adding new polling timers.
+- Changed reward drops to roll only when the user opens a charged chest, deducting 1000 stored key points instead of resetting the counter.
+- Wrapped reward popover status/button text so Korean and long charge values do not get clipped.
+- Reworked the settings page from a pixel hero layout into a compact settings app with a left navigation rail, single-column control flow, and sticky HUD preview.
+
+### Fixed
+
+- Migrated already-typed key totals into the new reward charge bank so existing 1000+ users can see the ready chest icon immediately.
+- Kept the ready chest icon tied to the 1000-key charge state so fully unlocked test inventories still show that the chest is charged.
+
 ## 0.1.16
 
 ### Added

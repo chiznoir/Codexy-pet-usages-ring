@@ -162,6 +162,8 @@ function Get-NormalizedSettings {
       showHoverReadout = Normalize-Bool (Get-PropertyValue $gamification "showHoverReadout" $null) $true
       showKeyCounter = Normalize-Bool (Get-PropertyValue $gamification "showKeyCounter" $null) $true
       showKeyEffects = Normalize-Bool (Get-PropertyValue $gamification "showKeyEffects" $null) $true
+      showComboHeat = Normalize-Bool (Get-PropertyValue $gamification "showComboHeat" $null) $true
+      showRewardCharge = Normalize-Bool (Get-PropertyValue $gamification "showRewardCharge" $null) $true
     }
   }
 }
@@ -217,6 +219,9 @@ function Read-GamificationStateSummary {
       rewardRolls = 0
       totalDrops = 0
       totalKeys = 0
+      rewardKeys = 0
+      rewardKeysMigrated = 2
+      rewardCooldownUntil = $null
       lastDropAt = $null
       lastDropItem = ""
     }
@@ -265,6 +270,26 @@ function Read-GamificationStateSummary {
     }
     $rewardRolls = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "rewardRolls" 0))
     if ($cosmeticDropCount -le 0) { $rewardRolls = 0 }
+    $totalKeys = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "totalKeys" 0))
+    $rewardKeysMigrated = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "rewardKeysMigrated" 0))
+    $rewardKeysValue = Get-PropertyValue $inventory "rewardKeys" $null
+    $rewardKeysBase = if ($null -eq $rewardKeysValue) { 0 } else { [int][double]$rewardKeysValue }
+    $rewardChestCost = 1000
+    $rewardKeys = if ($rewardKeysMigrated -lt 2) {
+      $historicSpentKeys = [Math]::Max(0, [int]$rewardRolls) * $rewardChestCost
+      $historicRewardKeys = [Math]::Max(0, $totalKeys - $historicSpentKeys)
+      [Math]::Max($historicRewardKeys, [Math]::Max(0, $rewardKeysBase))
+    } else {
+      [Math]::Max(0, $rewardKeysBase)
+    }
+    $rewardCooldownUntil = Get-PropertyValue $inventory "rewardCooldownUntil" $null
+    if ($null -ne $rewardCooldownUntil) {
+      try {
+        if ([datetime]$rewardCooldownUntil -le (Get-Date)) { $rewardCooldownUntil = $null }
+      } catch {
+        $rewardCooldownUntil = $null
+      }
+    }
     return [ordered]@{
       inventory = [ordered]@{
         snack = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "snack" 0))
@@ -286,7 +311,10 @@ function Read-GamificationStateSummary {
         activeEffect = $activeEffect
         rewardRolls = $rewardRolls
         totalDrops = $cosmeticDropCount
-        totalKeys = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "totalKeys" 0))
+        totalKeys = $totalKeys
+        rewardKeys = $rewardKeys
+        rewardKeysMigrated = 2
+        rewardCooldownUntil = $rewardCooldownUntil
         lastDropAt = $lastDropAt
         lastDropItem = $lastDropItem
       }

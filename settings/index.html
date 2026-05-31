@@ -1135,6 +1135,27 @@
       box-shadow: 4px 4px 0 var(--shadow);
     }
 
+    .key-heat-preview {
+      position: absolute;
+      top: 50%;
+      left: 5px;
+      display: grid;
+      gap: 2px;
+      transform: translateY(-50%);
+    }
+
+    .key-heat-preview i {
+      display: block;
+      width: 4px;
+      height: 4px;
+      background: var(--mint);
+      opacity: .38;
+    }
+
+    .key-heat-preview i:nth-child(-n+3) {
+      opacity: .96;
+    }
+
     .preview-surface[data-display-mode="battery"] .growth-preview,
     .preview-surface[data-display-mode="battery"] .key-preview {
       bottom: 108px;
@@ -1323,6 +1344,562 @@
         min-width: 145px;
       }
     }
+
+    /* Settings app redesign: calmer structure over the older pixel hero surface. */
+    :root {
+      --app-bg: #10151d;
+      --app-bg-soft: #151c25;
+      --surface: #19222d;
+      --surface-2: #121922;
+      --surface-3: #202b36;
+      --line: rgba(220, 232, 242, .16);
+      --line-strong: rgba(220, 232, 242, .28);
+      --text: #f4f7fb;
+      --text-soft: #b7c5d3;
+      --text-muted: #8495a6;
+      --accent: #45d4b4;
+      --accent-2: #74a8ff;
+      --warning-soft: #f3c766;
+      --radius: 8px;
+      font-family: "Segoe UI", "Cascadia Mono", Consolas, sans-serif;
+      background: var(--app-bg);
+      color: var(--text);
+    }
+
+    body {
+      background:
+        linear-gradient(180deg, rgba(116,168,255,.08), transparent 280px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        var(--app-bg);
+      background-size: auto, 32px 32px, auto;
+    }
+
+    .page {
+      width: min(1480px, 100%);
+      padding: 0 clamp(14px, 2vw, 28px) 32px;
+    }
+
+    .top-nav {
+      min-height: 64px;
+      padding: 10px 0;
+      background: linear-gradient(180deg, rgba(16,21,29,.98), rgba(16,21,29,.9));
+      border-bottom: 1px solid var(--line);
+      box-shadow: none;
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      gap: 12px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 22px rgba(5,9,14,.28);
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      top: 11px;
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: #0e141c;
+    }
+
+    .brand-text {
+      font-size: 14px;
+      letter-spacing: .01em;
+    }
+
+    .nav-links {
+      gap: 7px;
+    }
+
+    .nav-links a,
+    .mini-status {
+      min-height: 34px;
+      padding: 8px 11px;
+      color: var(--text-soft);
+      background: rgba(255,255,255,.045);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: none;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a:focus-visible,
+    .sidebar-nav a:hover,
+    .sidebar-nav a:focus-visible {
+      color: var(--text);
+      background: rgba(69,212,180,.12);
+      border-color: rgba(69,212,180,.42);
+      filter: none;
+      outline: none;
+    }
+
+    .nav-links a:active,
+    .sidebar-nav a:active,
+    .actions button:active,
+    .preset-grid button:active,
+    .reward-category:active {
+      transform: translateY(1px);
+    }
+
+    .mini-status {
+      color: var(--accent);
+      border-color: rgba(69,212,180,.34);
+    }
+
+    .hero {
+      display: none;
+    }
+
+    .settings-layout {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) minmax(330px, 400px);
+      gap: 16px;
+      align-items: start;
+      padding-top: 18px;
+    }
+
+    .settings-sidebar,
+    .preview-panel {
+      position: sticky;
+      top: 82px;
+    }
+
+    .settings-sidebar {
+      display: grid;
+      gap: 12px;
+    }
+
+    .sidebar-panel,
+    .panel,
+    .preview-panel {
+      background: rgba(25,34,45,.88);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 18px 50px rgba(5,9,14,.2);
+    }
+
+    .sidebar-panel,
+    .panel {
+      padding: 16px;
+    }
+
+    .sidebar-eyebrow {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .sidebar-nav {
+      display: grid;
+      gap: 5px;
+    }
+
+    .sidebar-nav a {
+      display: flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 8px 10px;
+      color: var(--text-soft);
+      text-decoration: none;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+    }
+
+    .sidebar-nav a.is-active {
+      color: var(--text);
+      background: rgba(69,212,180,.15);
+      border-color: rgba(69,212,180,.46);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .sidebar-status strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .sidebar-status p {
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .panel {
+      scroll-margin-top: 88px;
+    }
+
+    .panel:target,
+    #rewards:target {
+      border-color: rgba(69,212,180,.5);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 0 0 1px rgba(69,212,180,.18), 0 18px 50px rgba(5,9,14,.2);
+    }
+
+    .panel h2,
+    .preview-panel h2 {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 15px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.2;
+      text-transform: none;
+    }
+
+    .panel h2::before,
+    .preview-panel h2::before {
+      width: 4px;
+      height: 18px;
+      margin: 0;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: none;
+    }
+
+    .control-grid {
+      grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+      gap: 10px;
+    }
+
+    .control {
+      gap: 9px;
+      padding: 12px;
+      background: rgba(18,25,34,.86);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      transition: border-color .18s ease, background .18s ease;
+    }
+
+    .control:focus-within {
+      border-color: rgba(69,212,180,.5);
+      background: rgba(22,32,42,.96);
+    }
+
+    .control > span,
+    .toggle-label,
+    .path-label,
+    .inventory-title,
+    .mode-panel-title,
+    .reward-category strong {
+      color: var(--text-soft);
+      font-size: 11px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .control-row {
+      grid-template-columns: minmax(0, 1fr) minmax(70px, auto);
+      gap: 9px;
+    }
+
+    .toggle-row {
+      grid-template-columns: auto minmax(70px, auto);
+    }
+
+    .control select,
+    .control input[type="color"] {
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: var(--surface-2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+
+    .control select {
+      color: var(--text);
+    }
+
+    .control output {
+      min-width: 70px;
+      max-width: none;
+      padding: 7px 8px;
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.25;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      background: rgba(69,212,180,.14);
+      border: 1px solid rgba(69,212,180,.25);
+      border-radius: 7px;
+      box-shadow: none;
+    }
+
+    .segment-control,
+    .reward-category-grid,
+    .reward-selector,
+    .reward-panels {
+      min-width: 0;
+    }
+
+    .segment-control {
+      padding: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .segment-control button,
+    .preset-grid button,
+    .reward-category,
+    .actions button {
+      border-radius: 7px;
+      box-shadow: none;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease, color .18s ease;
+    }
+
+    .segment-control button {
+      color: var(--text-soft);
+      background: transparent;
+    }
+
+    .segment-control button[aria-pressed="true"] {
+      color: #0f171f;
+      background: var(--accent);
+      box-shadow: none;
+    }
+
+    .growth-guide,
+    .growth-mode-help,
+    .inventory-summary,
+    .mode-panel,
+    .loadout-chip,
+    .reward-category,
+    .inventory-item,
+    .reward-flow span,
+    .path-row {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: none;
+    }
+
+    .growth-guide {
+      color: var(--text-soft);
+      background: rgba(18,25,34,.72);
+    }
+
+    .growth-mode-help {
+      color: #0f171f;
+      background: rgba(69,212,180,.92);
+    }
+
+    .growth-rules li::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: none;
+    }
+
+    .mode-panels {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mode-panel {
+      background: rgba(18,25,34,.62);
+      opacity: .78;
+    }
+
+    .mode-panel.is-active {
+      background: rgba(22,42,43,.78);
+      border-color: rgba(69,212,180,.52);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .inventory-summary {
+      scroll-margin-top: 88px;
+      padding: 14px;
+      background: rgba(18,25,34,.74);
+    }
+
+    .reward-loadout {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .loadout-chip {
+      background: rgba(255,255,255,.035);
+    }
+
+    .loadout-chip strong,
+    .inventory-copy strong {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .reward-selector {
+      grid-template-columns: 168px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .reward-category {
+      background: rgba(255,255,255,.035);
+      border-color: var(--line);
+    }
+
+    .reward-category[aria-pressed="true"] {
+      background: rgba(69,212,180,.13);
+      border-color: rgba(69,212,180,.5);
+    }
+
+    .reward-panel.is-active {
+      grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+      gap: 9px;
+    }
+
+    .inventory-item {
+      min-height: 62px;
+      background: rgba(255,255,255,.035);
+    }
+
+    .inventory-icon {
+      border-radius: 7px;
+      box-shadow: none;
+    }
+
+    .inventory-copy {
+      color: var(--text-soft);
+    }
+
+    .reward-flow span {
+      background: rgba(255,255,255,.035);
+    }
+
+    .preset-grid {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+
+    .preset-grid button,
+    .actions button {
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--line-strong);
+    }
+
+    .preset-grid button:hover,
+    .actions button:hover {
+      background: var(--surface-3);
+      filter: none;
+    }
+
+    .preview-panel {
+      padding: 16px;
+    }
+
+    .preview-copy,
+    .path,
+    .hud-focus-note,
+    .mode-panel-hint {
+      color: var(--text-soft);
+    }
+
+    .preview-screen {
+      min-height: 350px;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(69,212,180,.12), transparent 38%),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,.045) 1px, transparent 1px),
+        var(--surface-2);
+      background-size: auto, 22px 22px, 22px 22px, auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+
+    .path-row {
+      background: rgba(18,25,34,.74);
+    }
+
+    .actions button.primary {
+      color: #0f171f;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    @media (max-width: 1220px) {
+      .settings-layout {
+        grid-template-columns: 210px minmax(0, 1fr);
+      }
+
+      .preview-panel {
+        grid-column: 2;
+        position: relative;
+        top: 0;
+      }
+    }
+
+    @media (max-width: 880px) {
+      .page {
+        padding-inline: 12px;
+      }
+
+      .top-nav {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .settings-layout {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .settings-sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 12;
+      }
+
+      .sidebar-panel {
+        padding: 10px;
+      }
+
+      .sidebar-status {
+        display: none;
+      }
+
+      .sidebar-nav {
+        display: flex;
+        gap: 7px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .sidebar-nav a {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .preview-panel {
+        grid-column: auto;
+      }
+
+      .mode-panels,
+      .reward-loadout,
+      .reward-selector,
+      .actions {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1340,43 +1917,29 @@
       </div>
     </nav>
 
-    <section class="hero" aria-labelledby="heroTitle">
-      <div class="hero-copy">
-        <h1 id="heroTitle">Codexy pet usages ring</h1>
-        <p data-i18n="heroSubtitle">픽셀 펫이 실제 /pet 주변 HUD와 함께 성장합니다. 이 화면에서 표시 방식, 색상, 호버, 사용량 성장 옵션을 바로 조정하세요.</p>
-        <div class="hero-actions">
-          <a class="pixel-button" href="#settings" data-i18n="openOptions">옵션 열기</a>
-          <button class="pixel-button secondary" id="saveHero" type="button" data-i18n="save">저장</button>
-        </div>
-      </div>
-      <div class="hero-stage" aria-label="Pixel pet animation">
-        <span class="scene-label" data-i18n="heroSceneLabel">PIXEL HUD ROOM</span>
-        <div class="pixel-sprite-wrap">
-          <div class="pixel-shadow" aria-hidden="true"></div>
-          <div class="pixel-pet" aria-hidden="true">
-            <div class="pet-ear left"></div>
-            <div class="pet-ear right"></div>
-            <div class="pet-tail"></div>
-            <div class="pet-body"></div>
-            <div class="pet-head"></div>
-            <div class="pet-face"></div>
-            <div class="pet-eye left"></div>
-            <div class="pet-eye right"></div>
-            <div class="pet-cheek left"></div>
-            <div class="pet-cheek right"></div>
-          </div>
-        </div>
-        <div class="hero-hud" aria-hidden="true">
-          <div class="hero-chip"><strong>5h</strong> 74%</div>
-          <div class="hero-chip"><strong>W</strong> 58%</div>
-          <div class="hero-chip"><strong>Lv</strong> 1</div>
-        </div>
-      </div>
-    </section>
-
     <div class="settings-layout" id="settings">
+      <aside class="settings-sidebar" aria-label="Settings sections">
+        <div class="sidebar-panel">
+          <span class="sidebar-eyebrow">Control Map</span>
+          <nav class="sidebar-nav" aria-label="Settings sections">
+            <a href="#general" data-settings-nav data-i18n="sectionGeneral">일반</a>
+            <a href="#growth" data-settings-nav data-i18n="sectionPetGrowth">펫 성장</a>
+            <a href="#rewards" data-settings-nav data-i18n="inventoryTitle">보상 보관함</a>
+            <a href="#presets" data-settings-nav data-i18n="sectionThemePresets">테마 프리셋</a>
+            <a href="#colors" data-settings-nav data-i18n="sectionRingColors">HUD 색상</a>
+            <a href="#readout" data-settings-nav data-i18n="sectionReadoutColors">읽기 표시</a>
+            <a href="#opacity" data-settings-nav data-i18n="sectionOpacity">투명도</a>
+            <a href="#motion" data-settings-nav data-i18n="sectionMotion">호버와 텍스트</a>
+          </nav>
+        </div>
+        <div class="sidebar-panel sidebar-status">
+          <span class="sidebar-eyebrow">Live Preview</span>
+          <strong data-i18n="previewTitle">HUD 미리보기</strong>
+          <p data-i18n="previewDescription">링, 배터리, 배지, 성장 칩이 펫과 겹치지 않는 HUD 위치로 표시됩니다.</p>
+        </div>
+      </aside>
       <section class="settings-grid" aria-label="Settings controls">
-        <section class="panel" aria-labelledby="generalTitle">
+        <section class="panel" id="general" aria-labelledby="generalTitle">
           <h2 id="generalTitle" data-i18n="sectionGeneral">일반</h2>
           <div class="control-grid">
             <label class="control">
@@ -1506,9 +2069,23 @@
                     <output></output>
                   </div>
                 </label>
+                <label class="control">
+                  <span data-i18n="comboHeat">콤보 열기 게이지</span>
+                  <div class="control-row toggle-row">
+                    <input type="checkbox" data-path="gamification.showComboHeat">
+                    <output></output>
+                  </div>
+                </label>
+                <label class="control">
+                  <span data-i18n="rewardCharge">보상 충전 게이지</span>
+                  <div class="control-row toggle-row">
+                    <input type="checkbox" data-path="gamification.showRewardCharge">
+                    <output></output>
+                  </div>
+                </label>
               </div>
             </div>
-            <div class="inventory-summary" aria-labelledby="inventoryTitle">
+            <div class="inventory-summary" id="rewards" aria-labelledby="inventoryTitle">
               <div class="inventory-head">
                 <span class="inventory-title" id="inventoryTitle" data-i18n="inventoryTitle">보상 보관함</span>
                 <span class="inventory-total" id="inventoryTotal">0 drops</span>
@@ -1604,7 +2181,7 @@
           </div>
         </section>
 
-        <section class="panel wide" aria-labelledby="presetTitle">
+        <section class="panel wide" id="presets" aria-labelledby="presetTitle">
           <h2 id="presetTitle" data-i18n="sectionThemePresets">테마 프리셋</h2>
           <div class="preset-grid">
             <button type="button" data-preset="arcadeMint" data-i18n="presetArcadeMint">아케이드 민트</button>
@@ -1615,7 +2192,7 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="colorTitle">
+        <section class="panel" id="colors" aria-labelledby="colorTitle">
           <h2 id="colorTitle" data-i18n="sectionRingColors">HUD 색상</h2>
           <div class="control-grid">
             <label class="control">
@@ -1656,7 +2233,7 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="readoutTitle">
+        <section class="panel" id="readout" aria-labelledby="readoutTitle">
           <h2 id="readoutTitle" data-i18n="sectionReadoutColors">읽기 표시</h2>
           <div class="control-grid">
             <label class="control">
@@ -1690,7 +2267,7 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="opacityTitle">
+        <section class="panel" id="opacity" aria-labelledby="opacityTitle">
           <h2 id="opacityTitle" data-i18n="sectionOpacity">투명도</h2>
           <div class="control-grid">
             <label class="control">
@@ -1731,7 +2308,7 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="motionTitle">
+        <section class="panel" id="motion" aria-labelledby="motionTitle">
           <h2 id="motionTitle" data-i18n="sectionMotion">호버와 텍스트</h2>
           <div class="control-grid">
             <label class="control">
@@ -1808,6 +2385,9 @@
             </div>
             <div class="key-preview" id="previewKeyCounter" aria-hidden="true">
               <span id="previewKeyText">128</span>
+              <span class="key-heat-preview" id="previewKeyHeat">
+                <i></i><i></i><i></i><i></i><i></i>
+              </span>
             </div>
             <div class="tooltip" id="previewTip">5h 90% 남음<br>재설정 22:27</div>
             <div class="tooltip inner" id="previewInnerTip">주간 64% 남음<br>화 15:24</div>
@@ -1839,6 +2419,7 @@
     const focusPanels = Array.from(document.querySelectorAll('[data-focus-panel]'));
     const rewardTabButtons = Array.from(document.querySelectorAll('[data-reward-tab]'));
     const rewardPanels = Array.from(document.querySelectorAll('[data-reward-panel]'));
+    const navAnchors = Array.from(document.querySelectorAll('[data-settings-nav]'));
     const sessionToken = new URLSearchParams(window.location.search).get('token') || '';
     let settings = null;
     let defaults = null;
@@ -1917,7 +2498,7 @@
         loadoutActiveFont: 'Active Font',
         loadoutActiveTheme: 'Active Theme',
         loadoutActiveEffect: 'Active Effect',
-        loadoutRewardRolls: 'Reward Rolls',
+        loadoutRewardRolls: 'Reward Rolls / Charge',
         rewardTabFonts: 'Fonts',
         rewardTabThemes: 'Themes',
         rewardTabEffects: 'Effects',
@@ -1935,6 +2516,8 @@
         growthHoverReadout: 'Growth Hover Readout',
         keyCounter: 'Key Counter',
         keyEffects: 'Key Effects',
+        comboHeat: 'Combo Heat',
+        rewardCharge: 'Reward Charge',
         enabledValue: 'On',
         disabledValue: 'Off',
         sectionThemePresets: 'Theme Presets',
@@ -2045,7 +2628,7 @@
         loadoutActiveFont: '적용 폰트',
         loadoutActiveTheme: '적용 테마',
         loadoutActiveEffect: '적용 이펙트',
-        loadoutRewardRolls: '보상 시도',
+        loadoutRewardRolls: '보상 시도 / 충전',
         rewardTabFonts: '폰트',
         rewardTabThemes: '테마',
         rewardTabEffects: '이펙트',
@@ -2063,6 +2646,8 @@
         growthHoverReadout: '성장 호버 표시',
         keyCounter: '키 카운터',
         keyEffects: '키 이펙트',
+        comboHeat: '콤보 열기 게이지',
+        rewardCharge: '보상 충전 게이지',
         enabledValue: '켜짐',
         disabledValue: '꺼짐',
         sectionThemePresets: '테마 프리셋',
@@ -2173,7 +2758,7 @@
         loadoutActiveFont: 'Active Font',
         loadoutActiveTheme: 'Active Theme',
         loadoutActiveEffect: 'Active Effect',
-        loadoutRewardRolls: 'Reward Rolls',
+        loadoutRewardRolls: 'Reward Rolls / Charge',
         rewardTabFonts: 'Fonts',
         rewardTabThemes: 'Themes',
         rewardTabEffects: 'Effects',
@@ -2191,6 +2776,8 @@
         growthHoverReadout: '成長ホバー表示',
         keyCounter: 'キー カウンター',
         keyEffects: 'キー エフェクト',
+        comboHeat: 'コンボヒート',
+        rewardCharge: '報酬チャージ',
         enabledValue: 'オン',
         disabledValue: 'オフ',
         sectionThemePresets: 'テーマ',
@@ -2301,7 +2888,7 @@
         loadoutActiveFont: 'Active Font',
         loadoutActiveTheme: 'Active Theme',
         loadoutActiveEffect: 'Active Effect',
-        loadoutRewardRolls: 'Reward Rolls',
+        loadoutRewardRolls: 'Reward Rolls / Charge',
         rewardTabFonts: 'Fonts',
         rewardTabThemes: 'Themes',
         rewardTabEffects: 'Effects',
@@ -2319,6 +2906,8 @@
         growthHoverReadout: '成长悬停提示',
         keyCounter: '按键计数器',
         keyEffects: '按键效果',
+        comboHeat: '连击热度',
+        rewardCharge: '奖励充能',
         enabledValue: '开启',
         disabledValue: '关闭',
         sectionThemePresets: '主题预设',
@@ -2386,7 +2975,7 @@
         text: { fontSize: 11, lineHeight: 13.5 },
         layout: { ringGap: 22 },
         behavior: { visibilityMode: 'hover', hoverRange: 28, fadeInMs: 120, fadeOutMs: 180 },
-        gamification: { growthMode: 'conserve', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true }
+        gamification: { growthMode: 'conserve', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true, showComboHeat: true, showRewardCharge: true }
       },
       berryQuest: {
         displayMode: 'badge',
@@ -2404,7 +2993,7 @@
         text: { fontSize: 11, lineHeight: 13.5 },
         layout: { ringGap: 18 },
         behavior: { visibilityMode: 'hover', hoverRange: 30, fadeInMs: 140, fadeOutMs: 190 },
-        gamification: { growthMode: 'balanced', hudFocus: 'combo', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true }
+        gamification: { growthMode: 'balanced', hudFocus: 'combo', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true, showComboHeat: true, showRewardCharge: true }
       },
       sunnyBattery: {
         displayMode: 'battery',
@@ -2422,7 +3011,7 @@
         text: { fontSize: 10.5, lineHeight: 13 },
         layout: { ringGap: 22 },
         behavior: { visibilityMode: 'hover', hoverRange: 26, fadeInMs: 120, fadeOutMs: 180 },
-        gamification: { growthMode: 'active', hudFocus: 'combo', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true }
+        gamification: { growthMode: 'active', hudFocus: 'combo', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true, showComboHeat: true, showRewardCharge: true }
       },
       quietTerminal: {
         displayMode: 'ring',
@@ -2440,7 +3029,7 @@
         text: { fontSize: 10.5, lineHeight: 13 },
         layout: { ringGap: 24 },
         behavior: { visibilityMode: 'hover', hoverRange: 24, fadeInMs: 110, fadeOutMs: 170 },
-        gamification: { growthMode: 'conserve', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true }
+        gamification: { growthMode: 'conserve', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true, showComboHeat: true, showRewardCharge: true }
       },
       highContrast: {
         displayMode: 'badge',
@@ -2458,7 +3047,7 @@
         text: { fontSize: 12, lineHeight: 14.5 },
         layout: { ringGap: 22 },
         behavior: { visibilityMode: 'always', hoverRange: 30, fadeInMs: 80, fadeOutMs: 120 },
-        gamification: { growthMode: 'balanced', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true }
+        gamification: { growthMode: 'balanced', hudFocus: 'growth', showGrowthChip: true, showHoverReadout: true, showKeyCounter: true, showKeyEffects: true, showComboHeat: true, showRewardCharge: true }
       }
     };
 
@@ -2558,6 +3147,34 @@
         panel.classList.toggle('is-active', panel.dataset.rewardPanel === activeTab);
       }
     };
+    const syncActiveNav = (id) => {
+      if (!id) return;
+      for (const anchor of navAnchors) {
+        anchor.classList.toggle('is-active', anchor.hash === `#${id}`);
+      }
+    };
+    const initSectionNavigation = () => {
+      const sections = navAnchors
+        .map((anchor) => document.getElementById(anchor.hash.slice(1)))
+        .filter(Boolean);
+      if (sections.length <= 0) return;
+      syncActiveNav((window.location.hash || '#general').slice(1));
+      for (const anchor of navAnchors) {
+        anchor.addEventListener('click', () => syncActiveNav(anchor.hash.slice(1)));
+      }
+      if (!('IntersectionObserver' in window)) return;
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible && visible.target.id) syncActiveNav(visible.target.id);
+      }, {
+        root: null,
+        rootMargin: '-18% 0px -62% 0px',
+        threshold: [0.1, 0.25, 0.5]
+      });
+      for (const section of sections) observer.observe(section);
+    };
     const updateInventorySummary = () => {
       const inventory = gamificationState && gamificationState.inventory ? gamificationState.inventory : {};
       const totalDrops = Number(inventory.totalDrops || 0);
@@ -2595,7 +3212,7 @@
       if (activeFontName) activeFontName.textContent = getRewardName(activeFont);
       if (activeThemeName) activeThemeName.textContent = getRewardName(activeTheme);
       if (activeEffectName) activeEffectName.textContent = getRewardName(activeEffect);
-      if (rewardRollCount) rewardRollCount.textContent = `${Number(inventory.rewardRolls || 0)}`;
+      if (rewardRollCount) rewardRollCount.textContent = `${Number(inventory.rewardRolls || 0)} / ${Number(inventory.rewardKeys || 0)}`;
       const unlockedFonts = rewardFonts.filter(([key]) => Boolean(inventory[key])).length;
       const unlockedThemes = rewardThemes.filter(([key]) => Boolean(inventory[key])).length;
       const unlockedEffects = rewardEffects.filter(([key]) => Boolean(inventory[key])).length;
@@ -2711,6 +3328,7 @@
       const growthText = document.getElementById('previewGrowthText');
       const keyCounter = document.getElementById('previewKeyCounter');
       const keyText = document.getElementById('previewKeyText');
+      const keyHeat = document.getElementById('previewKeyHeat');
       const tip = document.getElementById('previewTip');
       const innerTip = document.getElementById('previewInnerTip');
       const displayMode = valueFor('displayMode') || 'ring';
@@ -2720,6 +3338,7 @@
       const growthEnabled = Boolean(valueFor('gamification.enabled'));
       const growthChipEnabled = growthEnabled && Boolean(valueFor('gamification.showGrowthChip')) && hudFocus === 'growth';
       const keyCounterEnabled = growthEnabled && Boolean(valueFor('gamification.showKeyCounter')) && hudFocus === 'combo';
+      const comboHeatEnabled = keyCounterEnabled && Boolean(valueFor('gamification.showComboHeat'));
       const ringDisplay = displayMode === 'ring' ? '' : 'none';
       const batteryDisplay = displayMode === 'battery' ? 'grid' : 'none';
       const badgeDisplay = displayMode === 'badge' ? 'grid' : 'none';
@@ -2735,6 +3354,7 @@
       badge.style.display = badgeDisplay;
       growth.style.display = growthChipEnabled ? 'grid' : 'none';
       keyCounter.style.display = keyCounterEnabled ? 'grid' : 'none';
+      keyHeat.style.display = comboHeatEnabled ? 'grid' : 'none';
       if (growthChipEnabled) {
         growth.style.left = '50%';
         growth.style.transform = 'translateX(-50%)';
@@ -2815,6 +3435,9 @@
       keyCounter.style.borderColor = rgba(settings.colors.track, Math.max(0.16, settings.opacity.track));
       keyCounter.style.color = rgba(settings.colors.readoutText, settings.opacity.readoutText);
       keyText.textContent = hudFocus === 'combo' ? t('previewKeyCounter') : '128';
+      for (const segment of keyHeat.querySelectorAll('i')) {
+        segment.style.background = rgba(settings.colors.primary, settings.opacity.primary);
+      }
 
       tip.style.color = rgba(settings.colors.readoutText, settings.opacity.readoutText);
       tip.style.background = rgba(settings.colors.outerReadoutBackground, settings.opacity.readout);
@@ -2898,6 +3521,7 @@
     for (const button of rewardTabButtons) {
       button.addEventListener('click', () => syncRewardPanels(button.dataset.rewardTab));
     }
+    initSectionNavigation();
     for (const button of saveButtons) {
       button.addEventListener('click', () => save().catch((error) => showStatus(error.message)));
     }
