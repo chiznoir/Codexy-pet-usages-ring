@@ -309,6 +309,19 @@ function Convert-ChangelogHeadingEmoji {
 function Convert-ChangelogBulletKo {
   param([string]$Bullet)
 
+  $normalizedBullet = $Bullet -replace '`', ''
+  switch ($normalizedBullet) {
+    "Added a root Diagnose.bat launcher so double-click users can run diagnostics without opening PowerShell manually." {
+      return "PowerShell을 직접 열지 않아도 더블클릭으로 진단을 실행할 수 있도록 루트에 `Diagnose.bat` 런처를 추가했습니다."
+    }
+    "Made Settings.bat explain why its helper window stays open while the local settings page is active." {
+      return "로컬 설정 페이지가 열려 있는 동안 helper 창이 유지되는 이유를 `Settings.bat`에서 안내하도록 개선했습니다."
+    }
+    "Made Uninstall.bat ask whether to remove installed files when double-clicked, while keeping installed files by default for safety." {
+      return "`Uninstall.bat`을 더블클릭하면 설치 파일까지 제거할지 묻고, 안전을 위해 기본값은 파일 보존으로 유지했습니다."
+    }
+  }
+
   switch ($Bullet) {
     "Added a root `Diagnose.bat` launcher so double-click users can run diagnostics without opening PowerShell manually." {
       return "PowerShell을 직접 열지 않아도 더블클릭으로 진단을 실행할 수 있도록 루트에 `Diagnose.bat` 런처를 추가했습니다."
