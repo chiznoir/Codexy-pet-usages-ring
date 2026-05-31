@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.15
+
+### Changed
+
+- Reduced perceived keyboard counter latency by updating the visible count before reward drops and burst effects run.
+- Deferred reward drop processing and typing burst effects to background dispatcher priority so typing feedback can render first.
+- Reduced live usage polling pressure by polling less often, shortening the live usage timeout, and skipping usage refresh while typing is active.
+- Capped batched paw and text burst effects so delayed input batches cannot flood the UI thread.
+
+### Fixed
+
+- Fixed slow keyboard counter feedback when live usage lookups timed out or returned 503 errors on the WPF UI thread.
+- Fixed batched typing effects from delaying the next visible key count update.
+
 ## 0.1.14
 
 ### Added

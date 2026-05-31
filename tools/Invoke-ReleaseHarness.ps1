@@ -311,6 +311,24 @@ function Convert-ChangelogBulletKo {
     "Fixed reward bag popover placement so it no longer opens to the side over nearby HUD controls." {
       return "보상 보관함 팝오버가 옆으로 열려 근처 HUD 컨트롤 위를 덮는 배치 문제를 수정했습니다."
     }
+    "Reduced perceived keyboard counter latency by updating the visible count before reward drops and burst effects run." {
+      return "보상 드랍과 버스트 이펙트가 실행되기 전에 보이는 카운트 숫자를 먼저 갱신해 키보드 카운터 체감 지연을 줄였습니다."
+    }
+    "Deferred reward drop processing and typing burst effects to background dispatcher priority so typing feedback can render first." {
+      return "타이핑 피드백이 먼저 렌더링되도록 보상 드랍 처리와 타이핑 버스트 이펙트를 백그라운드 dispatcher 우선순위로 미뤘습니다."
+    }
+    "Reduced live usage polling pressure by polling less often, shortening the live usage timeout, and skipping usage refresh while typing is active." {
+      return "사용량 조회 간격을 늘리고 live usage timeout을 줄였으며, 타이핑 중에는 사용량 refresh를 건너뛰도록 해 polling 부담을 낮췄습니다."
+    }
+    "Capped batched paw and text burst effects so delayed input batches cannot flood the UI thread." {
+      return "지연된 입력 배치가 UI 스레드를 폭주시킬 수 없도록 발바닥과 텍스트 버스트 이펙트 생성량에 상한을 걸었습니다."
+    }
+    "Fixed slow keyboard counter feedback when live usage lookups timed out or returned 503 errors on the WPF UI thread." {
+      return "WPF UI 스레드에서 live usage 조회가 timeout 또는 503 오류로 지연될 때 키보드 카운터 반응이 느려지던 문제를 수정했습니다."
+    }
+    "Fixed batched typing effects from delaying the next visible key count update." {
+      return "배치로 몰린 타이핑 이펙트가 다음 키 카운트 표시 갱신을 늦추던 문제를 수정했습니다."
+    }
     default {
       return $Bullet
     }

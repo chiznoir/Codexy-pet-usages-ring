@@ -1,7 +1,7 @@
 param(
   [string]$CodexHome = "$env:USERPROFILE\.codex",
   [switch]$NoLiveUsage,
-  [int]$UsagePollSeconds = 10,
+  [int]$UsagePollSeconds = 30,
   [int]$FramePollMs = 60,
   [int]$KeyCounterPollMs = 16,
   [int]$IdleFramePollMs = 300,
@@ -27,7 +27,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
   throw "Codexy pet usages ring can only run on Windows."
 }
 
-$UsagePollSeconds = [Math]::Max(5, $UsagePollSeconds)
+$UsagePollSeconds = [Math]::Max(20, $UsagePollSeconds)
 $FramePollMs = [Math]::Max(24, $FramePollMs)
 $KeyCounterPollMs = [Math]::Max(8, $KeyCounterPollMs)
 $IdleFramePollMs = [Math]::Max($FramePollMs, $IdleFramePollMs)
@@ -1147,12 +1147,20 @@ function Get-LiveUsage {
     $payload = Invoke-RestMethod `
       -Uri "https://chatgpt.com/backend-api/wham/usage" `
       -Headers @{ Authorization = "Bearer $token"; Accept = "application/json" } `
-      -TimeoutSec 8
+      -TimeoutSec 2
     return Convert-UsagePayload -Payload $payload -Source "live"
   } catch {
     Write-AppLog "Live usage lookup failed: $($_.Exception.Message)"
     return $null
   }
+}
+
+function Test-RecentKeyInput {
+  param([double]$WithinSeconds = 5.0)
+  return (
+    $script:LastKeyInputAt -ne [datetime]::MinValue -and
+    ((Get-Date) - $script:LastKeyInputAt).TotalSeconds -lt $WithinSeconds
+  )
 }
 
 function Get-LogUsage {
@@ -1294,6 +1302,9 @@ print(json.dumps({
 }
 
 function Update-UsageState {
+  if ($script:HasUsageSnapshot -and (Test-RecentKeyInput -WithinSeconds 5.0)) {
+    return
+  }
   $next = Get-LiveUsage
   if ($null -eq $next) { $next = Get-LogUsage }
   if ($null -ne $next) {
@@ -2846,8 +2857,8 @@ function Start-KeyBurstEffect {
   if (($now - $script:LastKeyBurstAt).TotalMilliseconds -lt 18) { return }
   $script:LastKeyBurstAt = $now
   $tierValue = [Math]::Max(0, [int]$Tier)
-  $particleLimit = if ($tierValue -le 0) { 4 } elseif ($tierValue -eq 1) { 10 } elseif ($tierValue -eq 2) { 16 } else { 22 }
-  $particles = [Math]::Min($particleLimit, [Math]::Max(1, [int]$Count) + ($tierValue * 4))
+  $particleLimit = if ($tierValue -le 0) { 2 } elseif ($tierValue -eq 1) { 5 } elseif ($tierValue -eq 2) { 7 } else { 9 }
+  $particles = [Math]::Min($particleLimit, [Math]::Max(1, [Math]::Min(3, [int]$Count)) + ($tierValue * 2))
   $x = [double]$script:KeyCounterBounds.X + [double]$script:KeyCounterBounds.Width / 2.0
   $y = [double]$script:KeyCounterBounds.Y + 4.0
   if ($Tier -gt 0) {
@@ -2859,7 +2870,7 @@ function Start-KeyBurstEffect {
     New-KeyBurstParticle -X ($x + 8.0) -Y ($y - 10.0) -Index ($script:KeyPressCount + 11) -Tier $milestoneTierValue -MilestoneText "PUNG!"
   }
   $script:LastPawBurstAt = $now
-  $smallPawCount = [Math]::Max(1, [Math]::Min(24, [int]$Count))
+  $smallPawCount = [Math]::Max(1, [Math]::Min(3, [int]$Count))
   for ($i = 0; $i -lt $smallPawCount; $i++) {
     New-PawBurstParticle -X $x -Y $y -Index ($script:KeyPressCount + $i) -Tier 0
   }
@@ -3062,17 +3073,6 @@ function Update-KeyCounter {
   $tier = Get-KeyMilestoneTier -OldCount $oldCount -NewCount ([int]$script:KeyPressCount)
   $comboTier = [Math]::Max(0, [int]$script:KeyComboMultiplier - 1)
   $effectTier = [Math]::Max([int]$tier, [Math]::Min(2, $comboTier))
-  $dropItem = Add-InventoryDrop -Delta $delta
-  if (-not [string]::IsNullOrWhiteSpace([string]$dropItem)) {
-    Apply-CosmeticUnlockVisuals
-    Update-KeyCounterGeometry
-  }
-  $dropText = Get-DropItemLabel -Item ([string]$dropItem)
-  $milestoneText = if (-not [string]::IsNullOrWhiteSpace($dropText)) {
-    "+ {0}" -f $dropText
-  } elseif ($tier -gt 0) {
-    "{0}" -f ([int]$script:KeyPressCount)
-  } else { "" }
   $newVisualSignature = "{0}|{1}|{2}" -f $newDigits, (Get-KeyCounterStatusText), ([string]$script:Style.DisplayMode)
   if ($newDigits -ne $oldDigits -or $newDigits -ne [int]$script:LastKeyCounterDigits -or $newVisualSignature -ne $oldVisualSignature) {
     $script:LastKeyCounterDigits = $newDigits
@@ -3082,8 +3082,36 @@ function Update-KeyCounter {
   Update-KeyCounterVisualText
   Update-InventoryGeometry
   Start-KeyCounterPulse -Tier $effectTier
-  if ($script:RingVisualsVisible) {
-    Start-KeyBurstEffect -Count $delta -Tier $effectTier -MilestoneTier $tier -MilestoneText $milestoneText
+
+  $rewardDelta = [int]$delta
+  $burstCount = [Math]::Max(1, [Math]::Min(3, [int]$delta))
+  $burstTier = [int]$effectTier
+  $burstMilestoneTier = [int]$tier
+  $burstCountSnapshot = [int]$script:KeyPressCount
+  $rewardAndEffects = [Action]{
+    $dropItem = Add-InventoryDrop -Delta $rewardDelta
+    if (-not [string]::IsNullOrWhiteSpace([string]$dropItem)) {
+      Apply-CosmeticUnlockVisuals
+      Update-InventoryGeometry
+    }
+    $dropText = Get-DropItemLabel -Item ([string]$dropItem)
+    $burstMilestoneText = if (-not [string]::IsNullOrWhiteSpace($dropText)) {
+      "+ {0}" -f $dropText
+    } elseif ($burstMilestoneTier -gt 0) {
+      "{0}" -f $burstCountSnapshot
+    } else { "" }
+    if ($script:RingVisualsVisible) {
+      Start-KeyBurstEffect -Count $burstCount -Tier $burstTier -MilestoneTier $burstMilestoneTier -MilestoneText $burstMilestoneText
+    }
+  }.GetNewClosure()
+
+  if ($null -ne $script:App) {
+    [void]$script:App.Dispatcher.BeginInvoke(
+      [System.Windows.Threading.DispatcherPriority]::Background,
+      $rewardAndEffects
+    )
+  } else {
+    & $rewardAndEffects
   }
 }
 

@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/himomohi/Codexy-pet-usages-ring/releases/latest">
-    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.14-3CEBBD?style=for-the-badge&logo=github">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.15-3CEBBD?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md#0114"><img alt="Version 0.1.14" src="https://img.shields.io/badge/version-0.1.14-3CEBBD?style=for-the-badge"></a>
+  <a href="CHANGELOG.md#0115"><img alt="Version 0.1.15" src="https://img.shields.io/badge/version-0.1.15-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -226,4 +226,5 @@ Release zip 만들기:
 
 기능 추가와 버그 수정 release는 `VERSION`, README badge, `CHANGELOG.md`의
 최상단 버전을 함께 올립니다.
+
 
