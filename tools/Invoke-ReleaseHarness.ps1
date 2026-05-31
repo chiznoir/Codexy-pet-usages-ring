@@ -122,6 +122,7 @@ function Assert-DeployInitialRewardState {
   param([string]$ExtractPath)
 
   Write-Step "Verifying deployment starts with locked rewards"
+  Write-Host "Release invariant: deployed reward unlock state must always start locked/reset."
   $stateFileNames = @("gamification.json", "settings.json")
   $stateFiles = @(Get-ChildItem -LiteralPath $ExtractPath -Recurse -File -Force | Where-Object {
     $_.Name -in $stateFileNames
@@ -146,6 +147,34 @@ function Assert-DeployInitialRewardState {
   }
   if ([bool]$defaults.gamification.enabled) {
     throw "Deploy defaults must keep gamification disabled until the user enables it."
+  }
+
+  $unlockKeys = @(
+    "fontPixel",
+    "fontTerminal",
+    "themeForest",
+    "themeArcane",
+    "themeRoyal",
+    "themeCyber",
+    "themeCelestial",
+    "effectPawBurst",
+    "effectBearPaw",
+    "effectDogPaw",
+    "activeFont",
+    "activeTheme",
+    "activeEffect",
+    "rewardRolls",
+    "totalDrops",
+    "totalKeys",
+    "lastDropItem"
+  )
+  foreach ($key in $unlockKeys) {
+    if ($null -ne $defaults.PSObject.Properties[$key]) {
+      throw "Deploy defaults must not include local reward unlock key '$key'."
+    }
+    if ($null -ne $defaults.gamification.PSObject.Properties[$key]) {
+      throw "Deploy gamification defaults must not include local reward unlock key '$key'."
+    }
   }
 }
 
@@ -281,6 +310,24 @@ function Convert-ChangelogBulletKo {
   param([string]$Bullet)
 
   switch ($Bullet) {
+    "Added a root `Diagnose.bat` launcher so double-click users can run diagnostics without opening PowerShell manually." {
+      return "PowerShell을 직접 열지 않아도 더블클릭으로 진단을 실행할 수 있도록 루트에 `Diagnose.bat` 런처를 추가했습니다."
+    }
+    "Served runtime reward assets from the local settings server so the settings inventory can show the actual unlock/effect images." {
+      return "설정 보관함에서 실제 해금/이펙트 이미지를 볼 수 있도록 로컬 설정 서버가 런타임 보상 에셋을 제공하게 했습니다."
+    }
+    "Made `Settings.bat` explain why its helper window stays open while the local settings page is active." {
+      return "로컬 설정 페이지가 열려 있는 동안 helper 창이 유지되는 이유를 `Settings.bat`에서 안내하도록 개선했습니다."
+    }
+    "Made `Uninstall.bat` ask whether to remove installed files when double-clicked, while keeping installed files by default for safety." {
+      return "`Uninstall.bat`을 더블클릭하면 설치 파일까지 제거할지 묻고, 안전을 위해 기본값은 파일 보존으로 유지했습니다."
+    }
+    "Made the release harness explicitly fail deployment when reward unlock state keys appear in defaults, and remind final replies to confirm locked/reset deployment state." {
+      return "기본 설정에 보상 해금 상태 키가 포함되면 릴리즈 하네스가 실패하도록 하고, 최종 응답에서도 잠김/초기화 배포 상태를 확인하도록 기록했습니다."
+    }
+    "Fixed the settings reward summary API so unlocked paw effects and the active effect appear correctly in the settings inventory." {
+      return "해금된 발바닥 이펙트와 현재 적용 중인 이펙트가 설정 보관함에 올바르게 표시되도록 보상 요약 API를 수정했습니다."
+    }
     "Replaced cat, dog, and bear paw reward effect sprites with cleaner animal-specific paws and no surrounding particle clutter." {
       return "고양이, 강아지, 곰 발바닥 보상 이펙트 스프라이트를 더 깔끔하고 동물별 특징이 보이는 이미지로 교체했습니다."
     }
@@ -447,7 +494,8 @@ function Write-ReleaseAnnouncementFiles {
   Set-Content -LiteralPath $mustIncludePath -Encoding UTF8 -Value @(
     "After running the release harness, include the Korean and English release announcement code blocks in the final user-facing reply.",
     "Copy them from RELEASE_ANNOUNCEMENT_COPY_THIS.md.",
-    "Do not only summarize the release upload."
+    "Do not only summarize the release upload.",
+    "Always confirm that deployment rewards/unlocks were verified as locked/reset by the release harness."
   )
 
   return [PSCustomObject]@{

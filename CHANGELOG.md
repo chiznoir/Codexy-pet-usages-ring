@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.16
+
+### Added
+
+- Added a root `Diagnose.bat` launcher so double-click users can run diagnostics without opening PowerShell manually.
+- Served runtime reward assets from the local settings server so the settings inventory can show the actual unlock/effect images.
+
+### Changed
+
+- Made `Settings.bat` explain why its helper window stays open while the local settings page is active.
+- Made `Uninstall.bat` ask whether to remove installed files when double-clicked, while keeping installed files by default for safety.
+- Made the release harness explicitly fail deployment when reward unlock state keys appear in defaults, and remind final replies to confirm locked/reset deployment state.
+
+### Fixed
+
+- Fixed the settings reward summary API so unlocked paw effects and the active effect appear correctly in the settings inventory.
+
 ## 0.1.15
 
 ### Changed

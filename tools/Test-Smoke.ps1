@@ -226,7 +226,7 @@ function Assert-SettingsDisplayModes {
       throw "Settings HUD focus UI marker is missing: $needle"
     }
   }
-  foreach ($needle in @("function Read-GamificationStateSummary", "gamificationState = Read-GamificationStateSummary", "function Open-SettingsUrl", "msedge.exe")) {
+  foreach ($needle in @("function Read-GamificationStateSummary", "gamificationState = Read-GamificationStateSummary", "function Open-SettingsUrl", "msedge.exe", "effectPawBurst", "effectBearPaw", "effectDogPaw", "activeEffect", "function Write-BinaryResponse", "function Resolve-SettingsAssetPath", "/assets/runtime/*")) {
     if ($settingsScript.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
       throw "Settings inventory API marker is missing: $needle"
     }
@@ -237,13 +237,13 @@ function Assert-SettingsDisplayModes {
     }
   }
   $releaseManifest = Get-Content -Raw -LiteralPath (Join-Path $root "tools\ReleaseManifest.ps1")
-  foreach ($needle in @('"assets"', '"assets/runtime/reward-chest.png"', '"assets/runtime/unlock-font-pixel.png"', '"assets/runtime/unlock-font-terminal.png"', '"assets/runtime/unlock-theme-arcane.png"', '"assets/runtime/unlock-theme-royal.png"', '"assets/runtime/effect-paw-burst.png"', '"assets/runtime/effect-bear-paw-burst.png"', '"assets/runtime/effect-dog-paw-burst.png"', '"assets/runtime/theme-forest-border.png"', '"assets/runtime/theme-arcane-border.png"', '"assets/runtime/theme-royal-border.png"', '"assets/runtime/theme-cyber-border.png"', '"assets/runtime/theme-celestial-border.png"')) {
+  foreach ($needle in @('"Diagnose.bat"', '"assets"', '"assets/runtime/reward-chest.png"', '"assets/runtime/unlock-font-pixel.png"', '"assets/runtime/unlock-font-terminal.png"', '"assets/runtime/unlock-theme-arcane.png"', '"assets/runtime/unlock-theme-royal.png"', '"assets/runtime/effect-paw-burst.png"', '"assets/runtime/effect-bear-paw-burst.png"', '"assets/runtime/effect-dog-paw-burst.png"', '"assets/runtime/theme-forest-border.png"', '"assets/runtime/theme-arcane-border.png"', '"assets/runtime/theme-royal-border.png"', '"assets/runtime/theme-cyber-border.png"', '"assets/runtime/theme-celestial-border.png"')) {
     if ($releaseManifest.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
       throw "Reward chest release manifest marker is missing: $needle"
     }
   }
   $releaseHarness = Get-Content -Raw -LiteralPath (Join-Path $root "tools\Invoke-ReleaseHarness.ps1")
-  foreach ($needle in @("Assert-ReleaseMetadata", "New-VerifiedDeployZip", "Invoke-InstallRefresh", "Publish-GitHubRelease", "Assert-DeployInitialRewardState", "Deployment must not include local reward/settings state files", "Get-ReleaseAnnouncement", "Get-ReleaseAnnouncementParts", "Write-ReleaseAnnouncementFiles", "RELEASE_ANNOUNCEMENT_COPY_THIS.md", "FINAL_REPLY_MUST_INCLUDE_RELEASE_ANNOUNCEMENT.txt", "Release announcement", '"release", "create"', '"release", "upload"', "Codexy-pet-usages-ring-`$TargetVersion.zip")) {
+  foreach ($needle in @("Assert-ReleaseMetadata", "New-VerifiedDeployZip", "Invoke-InstallRefresh", "Publish-GitHubRelease", "Assert-DeployInitialRewardState", "Deployment must not include local reward/settings state files", "Release invariant: deployed reward unlock state must always start locked/reset.", "Always confirm that deployment rewards/unlocks were verified as locked/reset by the release harness.", "Get-ReleaseAnnouncement", "Get-ReleaseAnnouncementParts", "Write-ReleaseAnnouncementFiles", "RELEASE_ANNOUNCEMENT_COPY_THIS.md", "FINAL_REPLY_MUST_INCLUDE_RELEASE_ANNOUNCEMENT.txt", "Release announcement", '"release", "create"', '"release", "upload"', "Codexy-pet-usages-ring-`$TargetVersion.zip")) {
     if ($releaseHarness.IndexOf($needle, [System.StringComparison]::Ordinal) -lt 0) {
       throw "Project release harness marker is missing: $needle"
     }

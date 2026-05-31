@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/himomohi/Codexy-pet-usages-ring/releases/latest">
-    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.15-3CEBBD?style=for-the-badge&logo=github">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.16-3CEBBD?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md#0115"><img alt="Version 0.1.15" src="https://img.shields.io/badge/version-0.1.15-3CEBBD?style=for-the-badge"></a>
+  <a href="CHANGELOG.md#0116"><img alt="Version 0.1.16" src="https://img.shields.io/badge/version-0.1.16-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -50,7 +50,7 @@ using PowerShell, WPF, and Win32 window positioning.
 
 - Shows circular rings, compact battery bars, or badge chips around the current Codex `/pet` avatar.
 - Adds optional pet growth where today's XP fills from 5h usage progress, with weekly reset seasons and playful states.
-- Adds realtime typing-count gamification, rare reward drops, a clickable reward chest, and unlockable font/theme cosmetics.
+- Adds realtime typing-count gamification, rare reward drops, a clickable reward chest, and unlockable font/theme/effect cosmetics.
 - Displays 5h and weekly usage readouts on hover.
 - Localizes readouts, tray text, and settings UI for English, Korean, Japanese, and Chinese.
 - Auto-detects and can start Codex Desktop.
@@ -98,6 +98,7 @@ Install.bat
 Start.bat
 Stop.bat
 Status.bat
+Diagnose.bat
 Settings.bat
 Uninstall.bat
 ```
@@ -155,7 +156,8 @@ depletion guard behavior, not as the normal XP gate.
 
 The gamification panel controls the keyboard counter and reward display mode.
 Reward drops are intentionally rare; acquired cosmetics appear in the chest
-inventory and can unlock font styles or themed key-counter borders.
+inventory and can unlock font styles, themed key-counter borders, or paw-burst
+typing effects.
 
 The running helper reloads the settings file automatically.
 
@@ -241,5 +243,3 @@ Run the project release harness:
 The harness checks version metadata, runs smoke tests, rebuilds `배포용`,
 verifies release zip freshness, refreshes the installed helper, and can publish
 the tag plus GitHub Release when `-PublishGitHub` is supplied.
-
-

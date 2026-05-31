@@ -208,8 +208,12 @@ function Read-GamificationStateSummary {
       themeRoyal = $false
       themeCyber = $false
       themeCelestial = $false
+      effectPawBurst = $false
+      effectBearPaw = $false
+      effectDogPaw = $false
       activeFont = ""
       activeTheme = ""
+      activeEffect = ""
       rewardRolls = 0
       totalDrops = 0
       totalKeys = 0
@@ -229,13 +233,30 @@ function Read-GamificationStateSummary {
     $themeRoyal = [bool](Get-PropertyValue $inventory "themeRoyal" $false)
     $themeCyber = [bool](Get-PropertyValue $inventory "themeCyber" $false)
     $themeCelestial = [bool](Get-PropertyValue $inventory "themeCelestial" $false)
+    $effectPawBurst = [bool](Get-PropertyValue $inventory "effectPawBurst" $false)
+    $effectBearPaw = [bool](Get-PropertyValue $inventory "effectBearPaw" $false)
+    $effectDogPaw = [bool](Get-PropertyValue $inventory "effectDogPaw" $false)
     $themeKeys = @("themeForest", "themeArcane", "themeRoyal", "themeCyber", "themeCelestial")
-    $unlockKeys = @("fontPixel", "fontTerminal") + $themeKeys
-    $cosmeticDropCount = @($fontPixel, $fontTerminal, $themeForest, $themeArcane, $themeRoyal, $themeCyber, $themeCelestial).Where({ $_ }).Count
+    $effectKeys = @("effectPawBurst", "effectBearPaw", "effectDogPaw")
+    $unlockKeys = @("fontPixel", "fontTerminal") + $themeKeys + $effectKeys
+    $cosmeticDropCount = @(
+      $fontPixel,
+      $fontTerminal,
+      $themeForest,
+      $themeArcane,
+      $themeRoyal,
+      $themeCyber,
+      $themeCelestial,
+      $effectPawBurst,
+      $effectBearPaw,
+      $effectDogPaw
+    ).Where({ $_ }).Count
     $activeFont = [string](Get-PropertyValue $inventory "activeFont" "")
     if ($activeFont -notin @("fontPixel", "fontTerminal") -or -not [bool](Get-PropertyValue $inventory $activeFont $false)) { $activeFont = "" }
     $activeTheme = [string](Get-PropertyValue $inventory "activeTheme" "")
     if ($activeTheme -notin $themeKeys -or -not [bool](Get-PropertyValue $inventory $activeTheme $false)) { $activeTheme = "" }
+    $activeEffect = [string](Get-PropertyValue $inventory "activeEffect" "")
+    if ($activeEffect -notin $effectKeys -or -not [bool](Get-PropertyValue $inventory $activeEffect $false)) { $activeEffect = "" }
     $lastDropItem = [string](Get-PropertyValue $inventory "lastDropItem" "")
     $lastDropAt = Get-PropertyValue $inventory "lastDropAt" $null
     if ($lastDropItem -notin $unlockKeys) {
@@ -257,8 +278,12 @@ function Read-GamificationStateSummary {
         themeRoyal = $themeRoyal
         themeCyber = $themeCyber
         themeCelestial = $themeCelestial
+        effectPawBurst = $effectPawBurst
+        effectBearPaw = $effectBearPaw
+        effectDogPaw = $effectDogPaw
         activeFont = $activeFont
         activeTheme = $activeTheme
+        activeEffect = $activeEffect
         rewardRolls = $rewardRolls
         totalDrops = $cosmeticDropCount
         totalKeys = [Math]::Max(0, [int][double](Get-PropertyValue $inventory "totalKeys" 0))
@@ -286,6 +311,39 @@ function Write-TextResponse {
   $Context.Response.StatusCode = $StatusCode
   $Context.Response.ContentType = $ContentType
   $Context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+}
+
+function Write-BinaryResponse {
+  param($Context, [string]$Path, [string]$ContentType)
+  $bytes = [System.IO.File]::ReadAllBytes($Path)
+  $Context.Response.StatusCode = 200
+  $Context.Response.ContentType = $ContentType
+  $Context.Response.ContentLength64 = $bytes.Length
+  $Context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+}
+
+function Get-SettingsAssetContentType {
+  param([string]$Path)
+  switch ([System.IO.Path]::GetExtension($Path).ToLowerInvariant()) {
+    ".png" { return "image/png" }
+    ".jpg" { return "image/jpeg" }
+    ".jpeg" { return "image/jpeg" }
+    ".gif" { return "image/gif" }
+    ".svg" { return "image/svg+xml" }
+    default { return "application/octet-stream" }
+  }
+}
+
+function Resolve-SettingsAssetPath {
+  param([string]$RequestPath)
+  $relativePath = ($RequestPath.TrimStart("/") -replace '/', '\')
+  if ($relativePath -notlike "assets\runtime\*") { return "" }
+  if ($relativePath -match '(^|\\)\.\.(\\|$)') { return "" }
+  $assetRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "assets\runtime")).TrimEnd("\") + "\"
+  $assetPath = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath))
+  if (-not $assetPath.StartsWith($assetRoot, [System.StringComparison]::OrdinalIgnoreCase)) { return "" }
+  if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) { return "" }
+  return $assetPath
 }
 
 function Get-RequestBody {
@@ -390,6 +448,13 @@ try {
         $context.Response.StatusCode = 204
       } elseif ($context.Request.HttpMethod -eq "GET" -and ($path -eq "/" -or $path -eq "/index.html")) {
         Write-TextResponse -Context $context -Text (Read-Utf8Text -Path $settingsHtml) -ContentType "text/html; charset=utf-8"
+      } elseif ($context.Request.HttpMethod -eq "GET" -and $path -like "/assets/runtime/*") {
+        $assetPath = Resolve-SettingsAssetPath -RequestPath $path
+        if ([string]::IsNullOrWhiteSpace($assetPath)) {
+          Write-TextResponse -Context $context -Text "Not found" -StatusCode 404
+        } else {
+          Write-BinaryResponse -Context $context -Path $assetPath -ContentType (Get-SettingsAssetContentType -Path $assetPath)
+        }
       } elseif ($context.Request.HttpMethod -eq "GET" -and $path -eq "/api/settings") {
         Write-JsonResponse -Context $context -Value @{
           settings = Read-Settings

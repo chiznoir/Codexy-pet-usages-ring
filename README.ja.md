@@ -4,12 +4,12 @@
 
 <p align="center">
   <a href="https://github.com/himomohi/Codexy-pet-usages-ring/releases/latest">
-    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.15-3CEBBD?style=for-the-badge&logo=github">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download_latest_release-v0.1.16-3CEBBD?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md#0115"><img alt="Version 0.1.15" src="https://img.shields.io/badge/version-0.1.15-3CEBBD?style=for-the-badge"></a>
+  <a href="CHANGELOG.md#0116"><img alt="Version 0.1.16" src="https://img.shields.io/badge/version-0.1.16-3CEBBD?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-56B2FF?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge">
   <img alt="PowerShell 5.1+" src="https://img.shields.io/badge/PowerShell-5.1%2B-3CEBBD?style=for-the-badge">
@@ -95,6 +95,7 @@ Install.bat
 Start.bat
 Stop.bat
 Status.bat
+Diagnose.bat
 Settings.bat
 Uninstall.bat
 ```
@@ -151,7 +152,7 @@ install marker がある場合のみ動作します。
 
 ゲーミフィケーション panel では、keyboard counter と報酬表示モードを調整できます。
 報酬ドロップは意図的に低確率です。獲得済み cosmetic だけが chest inventory に表示され、
-フォントスタイルまたはテーマ付き key-counter border として適用できます。
+フォントスタイル、テーマ付き key-counter border、paw-burst typing effect として適用できます。
 
 実行中の helper は設定ファイルの変更を自動的に再読み込みします。
 
@@ -226,5 +227,3 @@ Release zip を作成:
 
 機能追加や bug fix release では、`VERSION`、README badge、`CHANGELOG.md` の
 最上位バージョンを一緒に更新してください。
-
-

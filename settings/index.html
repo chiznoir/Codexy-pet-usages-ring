@@ -705,13 +705,26 @@
     .inventory-icon {
       display: grid;
       place-items: center;
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
+      overflow: hidden;
       color: var(--shadow);
       font-size: 11px;
       font-weight: 900;
       background: var(--sun);
       box-shadow: 3px 3px 0 var(--shadow);
+    }
+
+    .inventory-icon img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      pointer-events: none;
+    }
+
+    .inventory-item[data-item-key^="theme"] .inventory-icon img {
+      width: 28px;
+      height: 28px;
     }
 
     .inventory-copy {
@@ -1536,47 +1549,47 @@
                 <div class="reward-panels">
                   <div class="reward-panel is-active" data-reward-panel="fonts">
                     <div class="inventory-item" data-item-key="fontPixel">
-                      <span class="inventory-icon">F</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/unlock-font-pixel.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemFontPixel">픽셀 폰트</strong><span id="inventoryFontPixel">잠김</span><em data-i18n="rewardTypeFont">Font</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="fontTerminal">
-                      <span class="inventory-icon">T</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/unlock-font-terminal.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemFontTerminal">터미널 폰트</strong><span id="inventoryFontTerminal">잠김</span><em data-i18n="rewardTypeFont">Font</em></span>
                     </div>
                   </div>
                   <div class="reward-panel" data-reward-panel="themes">
                     <div class="inventory-item" data-item-key="themeForest" data-rarity="common">
-                      <span class="inventory-icon">C</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/theme-forest-border.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemThemeForest">민트 회로 테마</strong><span id="inventoryThemeForest">잠김</span><em data-i18n="rarityCommon">Common</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="themeArcane" data-rarity="rare">
-                      <span class="inventory-icon">A</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/theme-arcane-border.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemThemeArcane">아케인 테마</strong><span id="inventoryThemeArcane">잠김</span><em data-i18n="rarityRare">Rare</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="themeRoyal" data-rarity="epic">
-                      <span class="inventory-icon">R</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/theme-royal-border.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemThemeRoyal">로열 테마</strong><span id="inventoryThemeRoyal">잠김</span><em data-i18n="rarityEpic">Epic</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="themeCyber" data-rarity="legendary">
-                      <span class="inventory-icon">N</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/theme-cyber-border.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemThemeCyber">네온 사이버 테마</strong><span id="inventoryThemeCyber">잠김</span><em data-i18n="rarityLegendary">Legendary</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="themeCelestial" data-rarity="mythic">
-                      <span class="inventory-icon">M</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/theme-celestial-border.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemThemeCelestial">셀레스티얼 테마</strong><span id="inventoryThemeCelestial">잠김</span><em data-i18n="rarityMythic">Mythic</em></span>
                     </div>
                   </div>
                   <div class="reward-panel" data-reward-panel="effects">
                     <div class="inventory-item" data-item-key="effectPawBurst" data-rarity="rare">
-                      <span class="inventory-icon">P</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/effect-paw-burst.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemEffectPawBurst">고양이 발바닥 파파팡</strong><span id="inventoryEffectPawBurst">잠김</span><em data-i18n="rewardTypeEffect">Effect</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="effectBearPaw" data-rarity="rare">
-                      <span class="inventory-icon">B</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/effect-bear-paw-burst.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemEffectBearPaw">곰 발바닥 파파팡</strong><span id="inventoryEffectBearPaw">잠김</span><em data-i18n="rewardTypeEffect">Effect</em></span>
                     </div>
                     <div class="inventory-item" data-item-key="effectDogPaw" data-rarity="rare">
-                      <span class="inventory-icon">D</span>
+                      <span class="inventory-icon"><img src="/assets/runtime/effect-dog-paw-burst.png" alt=""></span>
                       <span class="inventory-copy"><strong data-i18n="itemEffectDogPaw">강아지 발바닥 파파팡</strong><span id="inventoryEffectDogPaw">잠김</span><em data-i18n="rewardTypeEffect">Effect</em></span>
                     </div>
                   </div>

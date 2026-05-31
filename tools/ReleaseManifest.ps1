@@ -3,6 +3,7 @@ $script:CodexPetReleaseItems = @(
   "Start.bat",
   "Stop.bat",
   "Status.bat",
+  "Diagnose.bat",
   "Settings.bat",
   "Uninstall.bat",
   "bin",
@@ -24,6 +25,13 @@ $script:CodexPetReleaseItems = @(
 )
 
 $script:CodexPetRequiredFreshFiles = @(
+  "Install.bat",
+  "Start.bat",
+  "Stop.bat",
+  "Status.bat",
+  "Diagnose.bat",
+  "Settings.bat",
+  "Uninstall.bat",
   "settings/index.html",
   "assets/runtime/reward-chest.png",
   "assets/runtime/inventory-snack.png",
