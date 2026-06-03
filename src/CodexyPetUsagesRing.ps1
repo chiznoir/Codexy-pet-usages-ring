@@ -74,6 +74,7 @@ if (-not ("CodexPetLimitRingNative" -as [type])) {
   Add-Type @"
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -156,6 +157,12 @@ public static class CodexPetLimitRingNative {
 
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -280,6 +287,28 @@ public static class CodexPetLimitRingNative {
 
     public static bool ConsumeLeftMouseButtonClick() {
         return (GetAsyncKeyState(VK_LBUTTON) & 0x0001) != 0;
+    }
+
+    public static string GetMonitorDpiScale(int x, int y) {
+        try {
+            POINT point = new POINT { X = x, Y = y };
+            IntPtr monitor = MonitorFromPoint(point, 2);
+            if (monitor == IntPtr.Zero) {
+                return "1,1";
+            }
+
+            uint dpiX;
+            uint dpiY;
+            if (GetDpiForMonitor(monitor, 0, out dpiX, out dpiY) != 0 || dpiX == 0 || dpiY == 0) {
+                return "1,1";
+            }
+
+            return ((double)dpiX / 96.0).ToString("R", CultureInfo.InvariantCulture)
+                + ","
+                + ((double)dpiY / 96.0).ToString("R", CultureInfo.InvariantCulture);
+        } catch {
+            return "1,1";
+        }
     }
 
     public static void ShowHandCursor() {
@@ -506,6 +535,10 @@ $script:LastPetFrameSignature = ""
 $script:LastZOrderAt = [datetime]::MinValue
 $script:LastStateWriteTimeUtc = [datetime]::MinValue
 $script:CachedPetRect = $null
+$script:LastDisplayScaleSignature = ""
+$script:CachedDisplayScale = $null
+$script:LastCursorDpiSignature = ""
+$script:CachedCursorDpiScale = $null
 $script:RingOuterRadius = $null
 $script:RingInnerRadius = $null
 $script:BatteryPrimaryBounds = $null
@@ -1370,6 +1403,135 @@ function Update-UsageState {
   }
 }
 
+function Get-CodexDisplayScale {
+  param($Bounds)
+
+  $displayBounds = $Bounds.displayBounds
+  if ($null -eq $displayBounds) {
+    return [PSCustomObject]@{ DisplayX = 0.0; DisplayY = 0.0; ScreenX = 0.0; ScreenY = 0.0; ScaleX = 1.0; ScaleY = 1.0 }
+  }
+
+  $displayWidth = [double]$displayBounds.width
+  $displayHeight = [double]$displayBounds.height
+  if ($displayWidth -le 0.0 -or $displayHeight -le 0.0) {
+    return [PSCustomObject]@{ DisplayX = 0.0; DisplayY = 0.0; ScreenX = 0.0; ScreenY = 0.0; ScaleX = 1.0; ScaleY = 1.0 }
+  }
+
+  $screens = @([System.Windows.Forms.Screen]::AllScreens)
+  $screenSignature = ($screens | ForEach-Object {
+    $dpi = Get-MonitorDpiScale -ScreenBounds $_.Bounds
+    "{0:N0},{1:N0},{2:N0},{3:N0},{4},{5:N3},{6:N3}" -f $_.Bounds.X, $_.Bounds.Y, $_.Bounds.Width, $_.Bounds.Height, $_.Primary, [double]$dpi.ScaleX, [double]$dpi.ScaleY
+  }) -join ";"
+  $signature = "{0:N1}|{1:N1}|{2:N1}|{3:N1}|{4}" -f `
+    ([double]$displayBounds.x),
+    ([double]$displayBounds.y),
+    $displayWidth,
+    $displayHeight,
+    $screenSignature
+  if ($signature -eq $script:LastDisplayScaleSignature -and $null -ne $script:CachedDisplayScale) {
+    return $script:CachedDisplayScale
+  }
+
+  $best = $null
+  $bestScore = [double]::PositiveInfinity
+  foreach ($screen in $screens) {
+    $screenBounds = $screen.Bounds
+    $dpi = Get-MonitorDpiScale -ScreenBounds $screenBounds
+    $screenX = [double]$screenBounds.X / [double]$dpi.ScaleX
+    $screenY = [double]$screenBounds.Y / [double]$dpi.ScaleY
+    $screenWidth = [double]$screenBounds.Width / [double]$dpi.ScaleX
+    $screenHeight = [double]$screenBounds.Height / [double]$dpi.ScaleY
+    $scaleX = $screenWidth / $displayWidth
+    $scaleY = $screenHeight / $displayHeight
+    if ($scaleX -lt 0.5 -or $scaleX -gt 4.0 -or $scaleY -lt 0.5 -or $scaleY -gt 4.0) {
+      continue
+    }
+
+    $aspectScore = [Math]::Abs($scaleX - $scaleY)
+    $primaryPenalty = if ($screen.Primary) { 0.0 } else { 0.05 }
+    $score = $aspectScore + $primaryPenalty
+    if ($score -lt $bestScore) {
+      $bestScore = $score
+      $best = [PSCustomObject]@{
+        DisplayX = [double]$displayBounds.x
+        DisplayY = [double]$displayBounds.y
+        ScreenX = $screenX
+        ScreenY = $screenY
+        ScaleX = $scaleX
+        ScaleY = $scaleY
+        DpiScaleX = [double]$dpi.ScaleX
+        DpiScaleY = [double]$dpi.ScaleY
+      }
+    }
+  }
+
+  if ($null -eq $best) {
+    $best = [PSCustomObject]@{ DisplayX = 0.0; DisplayY = 0.0; ScreenX = 0.0; ScreenY = 0.0; ScaleX = 1.0; ScaleY = 1.0; DpiScaleX = 1.0; DpiScaleY = 1.0 }
+  }
+
+  $script:LastDisplayScaleSignature = $signature
+  $script:CachedDisplayScale = $best
+  Write-AppLog ("Pet display scale: display={0:N0}x{1:N0}, dpi={2:N3}x{3:N3}, scale={4:N3}x{5:N3}." -f $displayWidth, $displayHeight, [double]$best.DpiScaleX, [double]$best.DpiScaleY, [double]$best.ScaleX, [double]$best.ScaleY)
+  return $best
+}
+
+function Get-MonitorDpiScale {
+  param($ScreenBounds)
+
+  $centerX = [int]([double]$ScreenBounds.X + ([double]$ScreenBounds.Width / 2.0))
+  $centerY = [int]([double]$ScreenBounds.Y + ([double]$ScreenBounds.Height / 2.0))
+  try {
+    $parts = ([CodexPetLimitRingNative]::GetMonitorDpiScale($centerX, $centerY)).Split(",")
+    if ($parts.Count -ge 2) {
+      $scaleX = [double]::Parse($parts[0], [System.Globalization.CultureInfo]::InvariantCulture)
+      $scaleY = [double]::Parse($parts[1], [System.Globalization.CultureInfo]::InvariantCulture)
+      if ($scaleX -gt 0.0 -and $scaleY -gt 0.0) {
+        return [PSCustomObject]@{ ScaleX = $scaleX; ScaleY = $scaleY }
+      }
+    }
+  } catch {
+  }
+  return [PSCustomObject]@{ ScaleX = 1.0; ScaleY = 1.0 }
+}
+
+function Convert-CursorToScaledScreenPoint {
+  param($Cursor)
+
+  if ($null -eq $Cursor) { return $null }
+  try {
+    $point = [System.Drawing.Point]::new([int][double]$Cursor.X, [int][double]$Cursor.Y)
+    $screen = [System.Windows.Forms.Screen]::FromPoint($point)
+    $bounds = $screen.Bounds
+    $signature = "{0:N0},{1:N0},{2:N0},{3:N0}" -f $bounds.X, $bounds.Y, $bounds.Width, $bounds.Height
+    if ($signature -eq $script:LastCursorDpiSignature -and $null -ne $script:CachedCursorDpiScale) {
+      $dpi = $script:CachedCursorDpiScale
+    } else {
+      $dpi = Get-MonitorDpiScale -ScreenBounds $bounds
+      $script:LastCursorDpiSignature = $signature
+      $script:CachedCursorDpiScale = $dpi
+    }
+
+    return [PSCustomObject]@{
+      X = ([double]$bounds.X / [double]$dpi.ScaleX) + (([double]$Cursor.X - [double]$bounds.X) / [double]$dpi.ScaleX)
+      Y = ([double]$bounds.Y / [double]$dpi.ScaleY) + (([double]$Cursor.Y - [double]$bounds.Y) / [double]$dpi.ScaleY)
+    }
+  } catch {
+    return [PSCustomObject]@{ X = [double]$Cursor.X; Y = [double]$Cursor.Y }
+  }
+}
+
+function Convert-PetRectToScreenRect {
+  param($Bounds, $Rect)
+
+  $scale = Get-CodexDisplayScale -Bounds $Bounds
+  return [PSCustomObject]@{
+    X = [double]$scale.ScreenX + (([double]$Rect.X - [double]$scale.DisplayX) * [double]$scale.ScaleX)
+    Y = [double]$scale.ScreenY + (([double]$Rect.Y - [double]$scale.DisplayY) * [double]$scale.ScaleY)
+    Width = [double]$Rect.Width * [double]$scale.ScaleX
+    Height = [double]$Rect.Height * [double]$scale.ScaleY
+  }
+}
+
 function Read-PetRect {
   if (-not (Test-Path -LiteralPath $StatePath)) {
     $script:LastStateWriteTimeUtc = [datetime]::MinValue
@@ -1389,17 +1551,29 @@ function Read-PetRect {
       $script:CachedPetRect = $null
       return $null
     }
-    $mascot = if ($bounds.mascot) { $bounds.mascot } elseif ($bounds.anchor) { $bounds.anchor } else { $null }
-    if ($null -eq $mascot) {
+    $logicalRect = $null
+    if ($bounds.mascot) {
+      $mascot = $bounds.mascot
+      $logicalRect = [PSCustomObject]@{
+        X = [double]$bounds.x + [double]$mascot.left
+        Y = [double]$bounds.y + [double]$mascot.top
+        Width = [double]$mascot.width
+        Height = [double]$mascot.height
+      }
+    } elseif ($bounds.anchor) {
+      $anchor = $bounds.anchor
+      $logicalRect = [PSCustomObject]@{
+        X = [double]$anchor.x
+        Y = [double]$anchor.y
+        Width = [double]$anchor.width
+        Height = [double]$anchor.height
+      }
+    }
+    if ($null -eq $logicalRect) {
       $script:CachedPetRect = $null
       return $null
     }
-    $script:CachedPetRect = [PSCustomObject]@{
-      X = [double]$bounds.x + [double]$mascot.left
-      Y = [double]$bounds.y + [double]$mascot.top
-      Width = [double]$mascot.width
-      Height = [double]$mascot.height
-    }
+    $script:CachedPetRect = Convert-PetRectToScreenRect -Bounds $bounds -Rect $logicalRect
     return $script:CachedPetRect
   } catch {
     $script:LastStateWriteTimeUtc = [datetime]::MinValue
@@ -3046,10 +3220,10 @@ function Get-ConsumedLeftMouseClickCursor {
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
     $parts = $raw.Split(",")
     if ($parts.Count -lt 2) { return $null }
-    return [pscustomobject]@{
+    return Convert-CursorToScaledScreenPoint -Cursor ([pscustomobject]@{
       X = [double]([int]$parts[0])
       Y = [double]([int]$parts[1])
-    }
+    })
   } catch {
     return $null
   }
@@ -3972,7 +4146,7 @@ function Update-RingHoverVisibility {
     return
   }
 
-  $cursor = [System.Windows.Forms.Cursor]::Position
+  $cursor = Convert-CursorToScaledScreenPoint -Cursor ([System.Windows.Forms.Cursor]::Position)
   $inventoryOpen = Test-InventoryReadoutOpen
   if ($script:Style.DisplayMode -eq "battery") {
     $showRing = $inventoryOpen -or (Test-CursorOverPet -Cursor $cursor) -or (Test-CursorInBatteryRange -Cursor $cursor) -or (Test-CursorInGrowthChipRange -Cursor $cursor) -or (Test-CursorInKeyCounterRange -Cursor $cursor) -or (Test-CursorInInventoryRange -Cursor $cursor)
@@ -4011,6 +4185,54 @@ function Clamp-ReadoutPlacement {
   $left = [Math]::Max([double]$Bounds.Left + 4.0, [Math]::Min([double]$Placement.Left, [double]$Bounds.Right - [double]$Placement.Width - 4.0))
   $top = [Math]::Max([double]$Bounds.Top + 4.0, [Math]::Min([double]$Placement.Top, [double]$Bounds.Bottom - [double]$Placement.Height - 4.0))
   return New-ReadoutPlacement -Left $left -Top $top -Width ([double]$Placement.Width) -Height ([double]$Placement.Height)
+}
+
+function Convert-WorkingAreaToScaledBounds {
+  param($Screen)
+
+  $dpi = Get-MonitorDpiScale -ScreenBounds $Screen.Bounds
+  $area = $Screen.WorkingArea
+  $left = [double]$area.Left / [double]$dpi.ScaleX
+  $top = [double]$area.Top / [double]$dpi.ScaleY
+  $width = [double]$area.Width / [double]$dpi.ScaleX
+  $height = [double]$area.Height / [double]$dpi.ScaleY
+  return [PSCustomObject]@{
+    Left = $left
+    Top = $top
+    Right = $left + $width
+    Bottom = $top + $height
+    Width = $width
+    Height = $height
+  }
+}
+
+function Get-ScaledWorkingAreaNearPoint {
+  param([double]$ScreenX, [double]$ScreenY)
+
+  $best = $null
+  $bestScore = [double]::PositiveInfinity
+  foreach ($screen in @([System.Windows.Forms.Screen]::AllScreens)) {
+    $bounds = Convert-WorkingAreaToScaledBounds -Screen $screen
+    if (
+      $ScreenX -ge [double]$bounds.Left -and
+      $ScreenX -le [double]$bounds.Right -and
+      $ScreenY -ge [double]$bounds.Top -and
+      $ScreenY -le [double]$bounds.Bottom
+    ) {
+      return $bounds
+    }
+
+    $centerX = ([double]$bounds.Left + [double]$bounds.Right) / 2.0
+    $centerY = ([double]$bounds.Top + [double]$bounds.Bottom) / 2.0
+    $score = [Math]::Pow($ScreenX - $centerX, 2) + [Math]::Pow($ScreenY - $centerY, 2)
+    if ($score -lt $bestScore) {
+      $bestScore = $score
+      $best = $bounds
+    }
+  }
+
+  if ($null -ne $best) { return $best }
+  return [PSCustomObject]@{ Left = 0.0; Top = 0.0; Right = 1920.0; Bottom = 1080.0; Width = 1920.0; Height = 1080.0 }
 }
 
 function Get-MainHudScreenRect {
@@ -4067,8 +4289,7 @@ function Set-ReadoutWindowBelowAnchor {
 
   $screenX = [double]$AnchorRect.X + [double]$AnchorRect.Width / 2.0
   $screenY = [double]$AnchorRect.Y + [double]$AnchorRect.Height / 2.0
-  $screen = [System.Windows.Forms.Screen]::FromPoint([System.Drawing.Point]::new([int][Math]::Round($screenX), [int][Math]::Round($screenY)))
-  $bounds = $screen.WorkingArea
+  $bounds = Get-ScaledWorkingAreaNearPoint -ScreenX $screenX -ScreenY $screenY
   $margin = 10.0
   $mainHud = Get-MainHudScreenRect
   $belowTop = [double]$AnchorRect.Y + [double]$AnchorRect.Height + $margin
@@ -4115,8 +4336,7 @@ function Set-ReadoutWindowNearPoint {
   $Window.Width = $width
   $Window.Height = $height
 
-  $screen = [System.Windows.Forms.Screen]::FromPoint([System.Drawing.Point]::new([int][Math]::Round($ScreenX), [int][Math]::Round($ScreenY)))
-  $bounds = $screen.WorkingArea
+  $bounds = Get-ScaledWorkingAreaNearPoint -ScreenX $ScreenX -ScreenY $ScreenY
   $pet = $script:LastPetRect
   $margin = 12.0
   $candidates = @()
@@ -4494,7 +4714,7 @@ function Update-HoverReadout {
     return
   }
   Update-MouseClickHook
-  $cursor = [System.Windows.Forms.Cursor]::Position
+  $cursor = Convert-CursorToScaledScreenPoint -Cursor ([System.Windows.Forms.Cursor]::Position)
   $localX = [double]$cursor.X - [double]$script:Window.Left
   $localY = [double]$cursor.Y - [double]$script:Window.Top
   $clickCursor = Get-ConsumedLeftMouseClickCursor
