@@ -87,6 +87,7 @@ public static class CodexPetLimitRingNative {
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_NOOWNERZORDER = 0x0200;
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const int WH_KEYBOARD_LL = 13;
     private const int WH_MOUSE_LL = 14;
     private const int WM_KEYDOWN = 0x0100;
@@ -441,6 +442,22 @@ public static class CodexPetLimitRingNative {
         SetWindowPos(
             hWnd,
             frontHWnd,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER
+        );
+    }
+
+    public static void KeepTopmost(IntPtr hWnd) {
+        if (hWnd == IntPtr.Zero) {
+            return;
+        }
+
+        SetWindowPos(
+            hWnd,
+            HWND_TOPMOST,
             0,
             0,
             0,
@@ -1625,29 +1642,39 @@ function Set-EllipseBounds {
   [System.Windows.Controls.Canvas]::SetTop($Ellipse, $Center - $Radius)
 }
 
-function Move-RingBehindCodex {
+function Set-WindowNativeTopmost {
+  param($Window)
+  if ($null -eq $Window -or -not $Window.IsVisible) { return }
+  try { $Window.Topmost = $true } catch {}
+  try {
+    $handle = (New-Object System.Windows.Interop.WindowInteropHelper($Window)).Handle
+    if ($handle -ne [IntPtr]::Zero) {
+      [CodexPetLimitRingNative]::KeepTopmost($handle)
+    }
+  } catch {
+  }
+}
+
+function Keep-RingWindowsTopmost {
   if ($null -eq $script:Window -or -not $script:Window.IsVisible) {
     return
   }
 
   $now = Get-Date
-  if (($now - $script:LastZOrderAt).TotalMilliseconds -lt 2000) {
+  if (($now - $script:LastZOrderAt).TotalMilliseconds -lt 1000) {
     return
   }
   $script:LastZOrderAt = $now
 
-  $handle = (New-Object System.Windows.Interop.WindowInteropHelper($script:Window)).Handle
-  if ($handle -eq [IntPtr]::Zero) {
-    return
-  }
-
-  $left = [int][Math]::Floor([double]$script:Window.Left)
-  $top = [int][Math]::Floor([double]$script:Window.Top)
-  $right = [int][Math]::Ceiling([double]$script:Window.Left + [double]$script:Window.Width)
-  $bottom = [int][Math]::Ceiling([double]$script:Window.Top + [double]$script:Window.Height)
-  $front = [CodexPetLimitRingNative]::FindOverlappingCodexWindow($handle, $left, $top, $right, $bottom)
-  if ($front -ne [IntPtr]::Zero) {
-    [CodexPetLimitRingNative]::PlaceBehind($handle, $front)
+  foreach ($window in @(
+    $script:Window,
+    $script:OuterReadoutWindow,
+    $script:InnerReadoutWindow,
+    $script:GrowthReadoutWindow,
+    $script:InventoryReadoutWindow,
+    $script:InventoryPickerWindow
+  )) {
+    Set-WindowNativeTopmost -Window $window
   }
 }
 
@@ -4705,7 +4732,7 @@ function Update-PetFrame {
   Update-MouseClickHook
   Update-RingHoverVisibility
   Update-HoverReadout
-  Move-RingBehindCodex
+  Keep-RingWindowsTopmost
 }
 
 function Update-HoverReadout {
