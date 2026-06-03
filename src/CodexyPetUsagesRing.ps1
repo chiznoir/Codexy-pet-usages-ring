@@ -3973,6 +3973,19 @@ function Show-InventoryPicker {
   if (-not $script:InventoryPickerWindow.IsVisible) { $script:InventoryPickerWindow.Show() }
 }
 
+function Show-GrowthHoverReadoutIfNeeded {
+  param($Cursor, [double]$LocalX, [double]$LocalY)
+  if (-not ((Test-CursorInGrowthChipRange -Cursor $Cursor) -and $script:Style.ShowGrowthHoverReadout)) {
+    return $false
+  }
+
+  $hoverSignature = "Growth|{0:N0}|{1:N0}" -f $LocalX, $LocalY
+  if ($script:LastHoverSignature -eq $hoverSignature) { return $true }
+  $script:LastHoverSignature = $hoverSignature
+  Show-GrowthReadout
+  return $true
+}
+
 function Toggle-InventoryReadout {
   if (Test-InventoryReadoutOpen) {
     Hide-InventoryReadout -ResetPinned
@@ -4790,13 +4803,6 @@ function Update-HoverReadout {
     $script:InventoryMouseWasDown = $leftMouseDown
     Set-InventoryHoverHighlight -Visible (Test-InventoryReadoutOpen)
   }
-  if ((Test-CursorInGrowthChipRange -Cursor $cursor) -and $script:Style.ShowGrowthHoverReadout) {
-    $hoverSignature = "Growth|{0:N0}|{1:N0}" -f $localX, $localY
-    if ($script:LastHoverSignature -eq $hoverSignature) { return }
-    $script:LastHoverSignature = $hoverSignature
-    Show-GrowthReadout
-    return
-  }
   if ($script:Style.DisplayMode -in @("battery", "badge")) {
     $primary = if ($script:Style.DisplayMode -eq "badge") { $script:BadgePrimaryBounds } else { $script:BatteryPrimaryBounds }
     $secondary = if ($script:Style.DisplayMode -eq "badge") { $script:BadgeSecondaryBounds } else { $script:BatterySecondaryBounds }
@@ -4821,6 +4827,7 @@ function Update-HoverReadout {
         return
       }
     }
+    if (Show-GrowthHoverReadoutIfNeeded -Cursor $cursor -LocalX $localX -LocalY $localY) { return }
     Hide-RingReadouts
     return
   }
@@ -4842,6 +4849,7 @@ function Update-HoverReadout {
   $innerDelta = [Math]::Abs($distance - $innerRadius)
   $nearestDelta = [Math]::Min($outerDelta, $innerDelta)
   if ($nearestDelta -gt 18.0) {
+    if (Show-GrowthHoverReadoutIfNeeded -Cursor $cursor -LocalX $localX -LocalY $localY) { return }
     Hide-RingReadouts
     return
   }
